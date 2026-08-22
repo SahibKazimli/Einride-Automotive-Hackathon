@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>einride_mini_truck_bringup</name>
+  <version>0.0.0</version>
+  <description>Contains launch files for the einride_mini_truck project</description>
+  <maintainer email="vladyslav.aleksashyn@einride.tech">Vladyslav Aleksashyn</maintainer>
+  <license>Apache 2.0</license>
+  <author>Michael Carroll</author>
+  <author>Dharini Dutia</author>
+
+  <depend>ros_gz_sim</depend>
+  <depend>ros_gz_bridge</depend>
+  <!-- robot_state_publisher parses the model SDF through sdformat_urdf -->
+  <depend>robot_state_publisher</depend>
+  <depend>sdformat_urdf</depend>
+  <exec_depend>rviz2</exec_depend>
+  <!-- throttles the physics-rate /joint_states_raw down to /joint_states -->
+  <exec_depend>topic_tools</exec_depend>
+  <depend>einride_mini_truck_description</depend>
+  <depend>einride_mini_truck_gazebo</depend>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+

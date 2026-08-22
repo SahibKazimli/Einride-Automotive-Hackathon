@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>einride_mini_truck_gazebo</name>
+  <version>0.0.0</version>
+  <description>Gazebo-specific implementations for the einride_mini_truck project</description>
+  <maintainer email="vladyslav.aleksashyn@einride.tech">Vladyslav Aleksashyn</maintainer>
+  <license>Apache 2.0</license>
+  <author>Michael Carroll</author>
+  <author>Dharini Dutia</author>
+
+  <depend>einride_mini_truck_description</depend>
+
+  <!-- Gazebo as vendored by the ROS 2 distro, so no standalone Gazebo install is needed. -->
+  <depend>gz_cmake_vendor</depend>
+  <depend>gz_plugin_vendor</depend>
+  <depend>gz_common_vendor</depend>
+  <depend>gz_sim_vendor</depend>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+

@@ -1,0 +1,113 @@
+---
+# ros_gz_bridge configuration for einride-mini-truck.
+# Gazebo-side topic names are set explicitly in the model SDF, so these match 1:1.
+
+# --- clock -------------------------------------------------------------------
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "gz.msgs.Clock"
+  direction: GZ_TO_ROS
+
+# --- base motion -------------------------------------------------------------
+- ros_topic_name: "/cmd_vel"
+  gz_topic_name: "/cmd_vel"
+  ros_type_name: "geometry_msgs/msg/Twist"
+  gz_type_name: "gz.msgs.Twist"
+  direction: ROS_TO_GZ
+
+- ros_topic_name: "/odom"
+  gz_topic_name: "/odom"
+  ros_type_name: "nav_msgs/msg/Odometry"
+  gz_type_name: "gz.msgs.Odometry"
+  direction: GZ_TO_ROS
+
+# odom -> base_footprint, published by the DiffDrive system
+- ros_topic_name: "/tf"
+  gz_topic_name: "/pose"
+  ros_type_name: "tf2_msgs/msg/TFMessage"
+  gz_type_name: "gz.msgs.Pose_V"
+  direction: GZ_TO_ROS
+
+# All six wheels plus the two pan-tilt joints.
+# gz-sim's JointStatePublisher has no rate parameter and fires every physics step,
+# so this lands on /joint_states_raw and the bringup launch throttles it down to
+# /joint_states, which is what robot_state_publisher consumes.
+- ros_topic_name: "/joint_states_raw"
+  gz_topic_name: "/joint_states"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "gz.msgs.Model"
+  direction: GZ_TO_ROS
+
+# Only the front wheels are physically instrumented; this is the honest
+# proprioceptive stream. /joint_states carries all six for TF purposes.
+- ros_topic_name: "/wheel_encoders"
+  gz_topic_name: "/wheel_encoders"
+  ros_type_name: "sensor_msgs/msg/JointState"
+  gz_type_name: "gz.msgs.Model"
+  direction: GZ_TO_ROS
+
+# --- IMU ---------------------------------------------------------------------
+- ros_topic_name: "/imu"
+  gz_topic_name: "/imu"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/mag"
+  gz_topic_name: "/mag"
+  ros_type_name: "sensor_msgs/msg/MagneticField"
+  gz_type_name: "gz.msgs.Magnetometer"
+  direction: GZ_TO_ROS
+
+# --- 2D lidar ----------------------------------------------------------------
+- ros_topic_name: "/scan"
+  gz_topic_name: "/scan"
+  ros_type_name: "sensor_msgs/msg/LaserScan"
+  gz_type_name: "gz.msgs.LaserScan"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/scan/points"
+  gz_topic_name: "/scan/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS
+
+# --- OAK-D Lite (forward-facing) ------------------------------------------------
+# Topic layout follows depthai_ros_driver: /oak/rgb/*, /oak/stereo/*, /oak/points.
+# The point cloud is remapped here because gz derives it as <depth topic>/points.
+- ros_topic_name: "/oak/rgb/image_raw"
+  gz_topic_name: "/oak/rgb/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/oak/rgb/camera_info"
+  gz_topic_name: "/oak/rgb/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/oak/stereo/image_raw"
+  gz_topic_name: "/oak/stereo/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/oak/stereo/camera_info"
+  gz_topic_name: "/oak/stereo/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/oak/imu/data"
+  gz_topic_name: "/oak/imu/data"
+  ros_type_name: "sensor_msgs/msg/Imu"
+  gz_type_name: "gz.msgs.IMU"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/oak/points"
+  gz_topic_name: "/oak/stereo/image_raw/points"
+  ros_type_name: "sensor_msgs/msg/PointCloud2"
+  gz_type_name: "gz.msgs.PointCloudPacked"
+  direction: GZ_TO_ROS
