@@ -1,0 +1,86 @@
+---
+# Parameters for ugv02_serial_node, the serial hardware abstraction layer.
+# Nothing in the node is hardcoded; every tunable it has is listed here.
+#
+# The node is launched by einride_mini_truck_bringup/launch/hardware.launch.py.
+/ugv02_serial_node:
+  ros__parameters:
+
+    # --- link ---------------------------------------------------------------
+    # The chassis MCU is on the Pi/Jetson header UART, 115200 8N1, newline
+    # delimited JSON both directions.
+    port: /dev/ttyAMA0
+    baud: 115200
+
+    # --- geometry -----------------------------------------------------------
+    # The wire carries accumulated distance in metres per side; /wheel_encoders
+    # carries radians per joint, as simulation does. This is the conversion.
+    # Measured from the wheel mesh, matching model.sdf.
+    wheel_radius: 0.040
+
+    # Only the front wheels are instrumented. Spelled exactly as in model.sdf,
+    # left first, then right - the order the MCU sends odl/odr in.
+    # UNVERIFIED: which pair actually carries encoders is taken on trust. If the
+    # robot proves otherwise this is the only place that needs changing.
+    encoder_joint_names:
+      - left_up_wheel_link_joint
+      - right_up_wheel_link_joint
+
+    # --- frames -------------------------------------------------------------
+    imu_frame: base_imu_link
+    # Simulation publishes /wheel_encoders with an empty frame_id, and a
+    # JointState has no meaningful frame. Kept configurable only for parity.
+    encoder_frame: ""
+
+    # --- rates --------------------------------------------------------------
+    # 0.0 publishes every feedback frame the MCU sends, which is the honest
+    # behaviour: the link is the rate limit. At 115200 baud a ~140-byte T:1001
+    # line caps the loop near 80 Hz, so the simulation's declared 100 Hz IMU is
+    # not reachable on hardware. Set non-zero only to decimate deliberately.
+    feedback_publish_rate: 0.0
+    # Battery voltage changes on a timescale of minutes. Throttling it keeps a
+    # publish out of the hot path 79 cycles in 80.
+    voltage_publish_rate: 1.0
+
+    # --- motion -------------------------------------------------------------
+    # There is no angular deadband, deliberately: /cmd_vel reaches the MCU
+    # unmodified. See _on_cmd_vel in ugv02_serial_node.py for why, and express
+    # the platform's real pivot limit as nav2's min_speed_theta.
+
+    # Stop if commands stop arriving: the MCU holds the last commanded velocity
+    # indefinitely, so a crashed teleop otherwise leaves the robot driving.
+    # Set 0 to disable.
+    cmd_vel_timeout: 0.5
+
+    # --- timestamps ---------------------------------------------------------
+    # The MCU sends no timestamps, so the node stamps at receipt. A ~140-byte
+    # line spends ~12 ms on the wire, so its oldest field is already that stale.
+    # compensate_transmission_time subtracts that computed transmission time.
+    compensate_transmission_time: true
+    # Residual constant lag - UART FIFO plus scheduler latency - in seconds.
+    # Stays 0 until measured on the board (phase 5), e.g. by comparing a sharp
+    # yaw against the OAK-D IMU. Feed the same number to robot_localization's
+    # transform_time_offset when the EKF phase lands.
+    stamp_offset: 0.0
+
+    # --- noise --------------------------------------------------------------
+    # Datasheet-derived at 100 Hz bandwidth, identical to the noise model.sdf
+    # injects in simulation, so a filter tuned in simulation sees the same
+    # numbers here. ICM-20948 gyro 0.015 deg/s/sqrt(Hz), accel 230 ug/sqrt(Hz);
+    # the AK09916 figure is an estimate around its 0.15 uT/LSB resolution.
+    imu_angular_velocity_stddev: 0.00262
+    imu_linear_acceleration_stddev: 0.0226
+    magnetic_field_stddev: 3.0e-7
+
+    # --- I/O plumbing -------------------------------------------------------
+    read_timeout: 0.1
+    write_timeout: 0.1
+    read_size: 512
+    # A T:1001 line is ~140 bytes; anything approaching this means the link is
+    # producing garbage rather than lines, so the partial buffer is discarded.
+    max_line_bytes: 4096
+    # Bounded so a stalled executor drops stale samples instead of growing
+    # without limit. ~2.5 s of feedback at 80 Hz.
+    rx_queue_depth: 200
+    reconnect_backoff: 0.5
+    reconnect_backoff_max: 5.0

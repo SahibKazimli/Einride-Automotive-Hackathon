@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>einride_mini_truck_hardware</name>
+  <version>0.0.0</version>
+  <description>Hardware abstraction layer: drives the real UGV02 chassis over serial and reproduces the simulation's topic contract</description>
+  <maintainer email="vladyslav.aleksashyn@einride.tech">Vladyslav Aleksashyn</maintainer>
+  <license>Apache 2.0</license>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>python3-serial</depend>
+  <depend>python3-numpy</depend>
+
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>python3-mypy</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

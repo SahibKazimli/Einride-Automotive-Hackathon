@@ -8,6 +8,8 @@ four driven wheels, a 360-degree lidar, a stereo depth camera, and two IMUs.
 * `einride_mini_truck_description` - the SDF model and meshes.
 * `einride_mini_truck_gazebo` - world file and Gazebo system plugins.
 * `einride_mini_truck_application` - ROS 2 application code (placeholder).
+* `einride_mini_truck_hardware` - the serial hardware abstraction layer, for
+  running the same stack on the real robot.
 * `einride_mini_truck_bringup` - launch files, bridge config, RViz config.
 
 ---
@@ -27,15 +29,7 @@ four driven wheels, a 360-degree lidar, a stereo depth camera, and two IMUs.
 
 Six wheels, four driven. The front and rear pairs take drive torque; the middle
 pair are free-rolling idlers that carry load, roll at ground speed, and take no
-command.
-
-Only the front wheels are instrumented with encoders, so `/wheel_encoders`
-carries just that pair - see [Joint states and TF](#joint-states-and-tf) for why
-`/joint_states` still carries all six.
-
-> **Unverified:** which four wheels are driven, and which two carry encoders, are
-> both taken on trust rather than from a datasheet. Each is declared in exactly one
-> place in `model.sdf`, so correcting either is a one-line change.
+command. Only the front wheels are instrumented with encoders.
 
 ## Lidar
 
@@ -59,21 +53,15 @@ Luxonis **OAK-D Lite**: colour IMX214, stereo depth from an OV7251 pair on a
 
 | stream | resolution | HFOV | VFOV | DFOV | topic |
 |---|---|---|---|---|---|
-| colour | 1052x780 @ 30 Hz | 69.0 | 54.0 | 81.1 | `/oak/rgb/image_raw` |
+| colour | 4208x3120 @ 30 Hz | 69.0 | 54.0 | 81.1 | `/oak/rgb/image_raw` |
 | depth | 640x480 @ 30 Hz | 73.0 | 58.1 | 85.5 | `/oak/stereo/image_raw` |
 
 Depth range is 0.2 - 19 m. Point cloud on `/oak/points`, camera IMU on
 `/oak/imu/data`.
 
-The colour resolution is an exact whole-fraction downscale of the sensor's native
-4208x3120, which is what makes the field of view come out right. That frame is
-**not** 4:3 - it is 1.3487 - and preserving that aspect is what reproduces the
-datasheet's 69/54/81. Forcing a true 4:3 gives VFOV 54.5; any 16:9 mode such as
-1080p or 720p drops VFOV to 42.3, losing about 12 degrees of vertical field.
-
-Simplifications: colour and depth share one optical frame (`oak_d_lite_link`),
-with depth colour-aligned as depthai does by default, and the two mono streams are
-not exposed separately.
+Colour and depth share one optical frame (`oak_d_lite_link`), with depth
+colour-aligned as depthai does by default, and the two mono streams are not
+exposed separately.
 
 ### Matching the real camera
 
@@ -148,11 +136,15 @@ acceleration and its magnetometer for absolute heading.
 1. Launch (starts running, not paused)
 
     ```bash
-    ros2 launch einride_mini_truck_bringup einride_mini_truck.launch.py
+    ros2 launch einride_mini_truck_bringup simulation.launch.py
     ```
 
    Arguments: `headless:=true` (no GUI), `rviz:=false`, `world:=<basename>`,
    `joint_state_rate:=<Hz>` (default 50).
+
+   `einride_mini_truck.launch.py` still works and forwards every argument - it
+   is now a shim around `simulation.launch.py`, which is named for symmetry
+   with `hardware.launch.py`.
 
 ## Topics
 
@@ -171,6 +163,27 @@ acceleration and its magnetometer for absolute heading.
 | `/oak/stereo/image_raw`, `/oak/stereo/camera_info` | `Image` (32FC1), `CameraInfo` | depth |
 | `/oak/points` | `PointCloud2` | depth cloud |
 | `/oak/imu/data` | `sensor_msgs/Imu` | camera BMI270 |
+| `/voltage` | `std_msgs/Float32` | battery voltage, not available in simulation |
+
+### Subscribing to the sensor streams
+
+`/imu`, `/mag` and `/wheel_encoders` are published **best-effort**
+(`qos_profile_sensor_data`, KEEP_LAST(5)) in both simulation and on hardware.
+
+That means that subscriptions should use best-effort as well. The default depth
+argument requests RELIABLE, which is *incompatible* - you get no messages at
+all and only a QoS warning in the log:
+
+```python
+from rclpy.qos import qos_profile_sensor_data
+
+self.create_subscription(Imu, '/imu', self.cb, qos_profile_sensor_data)  # yes
+self.create_subscription(Imu, '/imu', self.cb, 10)                       # silent
+```
+
+`/cmd_vel` and `/voltage` stay reliable - a dropped command leaves the MCU
+holding its last velocity, and one lost 1 Hz battery reading is a whole second
+of nothing.
 
 ## Driving it
 
@@ -190,6 +203,47 @@ gz sim -s -r einride_mini_truck.sdf &
 ros2 run ros_gz_bridge parameter_bridge --ros-args \
   -p config_file:=$(ros2 pkg prefix einride_mini_truck_bringup)/share/einride_mini_truck_bringup/config/einride_mini_truck_bridge.yaml
 ```
+
+---
+
+# Running on real hardware
+
+The same stack runs on the robot; only the layer that talks to hardware is
+swapped.
+
+```bash
+ros2 launch einride_mini_truck_bringup hardware.launch.py
+```
+
+Arguments: `rviz:=false` (pass this on a headless Jetson), `lidar:=false`,
+`camera:=false`, `hardware_params:=<path>`.
+
+## Differences between hardware and simulation
+
+| | why |
+|---|---|
+| ~80 Hz feedback, not 100 | At 115200 baud a ~140-byte `T:1001` line takes 12.2 ms to transmit, which caps the loop |
+| Stamps are ~12 ms late | The MCU sends no timestamps. The node subtracts each line's transmission time; the residual goes in `stamp_offset`, to be measured on the robot |
+| No IMU orientation | The MCU sends raw gyro and accelerometer counts, no fused attitude, so `orientation_covariance[0]` is -1 per REP-145. Simulation does provide an orientation |
+| No wheel effort | `/wheel_encoders` leaves `effort` empty; the chassis has no torque sensing. Simulation's zeros are not measurements either |
+| Softer command response | Serial round trip plus MCU PID, against Gazebo applying joint velocity immediately |
+
+## Testing it without a robot
+
+```bash
+colcon test --packages-select einride_mini_truck_hardware einride_mini_truck_bringup
+colcon test-result --verbose
+```
+
+* the codec as pure functions - framing across chunk boundaries, unit
+  conversions, malformed and non-finite input;
+* the node against a **pty** standing in for the MCU, replaying a capture: its
+  real reader thread, writer thread and executor, no mocking;
+* the conformance test, which launches both modes and diffs their graphs.
+
+`einride_mini_truck_hardware/test/data/ugv02_feedback.jsonl` is synthetic,
+generated to the documented protocol. Replace it with a real capture during
+on-robot bring-up; see the README next to it.
 
 ---
 

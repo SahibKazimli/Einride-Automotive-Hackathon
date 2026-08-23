@@ -1,0 +1,31 @@
+---
+# depthai_ros_driver parameters for the OAK-D Lite, set so the real camera
+# matches the simulated one. Used by hardware.launch.py.
+#
+# The colour stream is the sensor's native 4208x3120 ISP-scaled by 1/4, giving
+# 1052x780. That frame is not 4:3 - it is 1.3487 - and preserving that aspect is
+# what reproduces the datasheet's 69/54/81 degree field of view. Forcing a true
+# 4:3 gives VFOV 54.5; any 16:9 mode such as 1080p or 720p drops VFOV to 42.3,
+# losing about 12 degrees of vertical field. See "Matching the real camera" in
+# the project README.
+/oak:
+  ros__parameters:
+    camera:
+      # Simulation publishes /oak/imu/data from the BMI270, so hardware must
+      # too. The reference config had this off. It is the quieter of the two
+      # gyros and the better heading source, so it is not optional here.
+      i_enable_imu: true
+      i_enable_ir: false
+      i_nn_type: none
+    rgb:
+      i_resolution: 13MP          # 4208x3120 native
+      i_set_isp_scale: true
+      i_isp_num: 1
+      i_isp_den: 4                # -> 1052x780, matching model.sdf
+      i_fps: 30.0
+    stereo:
+      i_resolution: 480P          # 640x480, matching model.sdf
+      i_fps: 30.0
+      # Depth is colour-aligned by default, which is what the model assumes:
+      # colour and depth share one optical frame.
+      i_subpixel: true

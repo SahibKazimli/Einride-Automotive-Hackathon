@@ -20,9 +20,26 @@
   <depend>einride_mini_truck_description</depend>
   <depend>einride_mini_truck_gazebo</depend>
 
+  <!-- hardware.launch.py only. The three device drivers are not needed to run
+       the simulation, and are not available off the robot, so they are
+       exec-only and every one of them can be switched off with a launch
+       argument. -->
+  <exec_depend>einride_mini_truck_hardware</exec_depend>
+  <!-- ldlidar is not a released ROS package: build it from source, e.g. the
+       copy in ugv_ws/src/ugv_else/ldlidar. rosdep will warn that it cannot
+       resolve this key, which the README's -r flag turns into a warning
+       rather than a failure. -->
+  <exec_depend>ldlidar</exec_depend>
+  <exec_depend>depthai_ros_driver</exec_depend>
+  <!-- derives /scan/points from /scan, which the LD19 driver does not publish -->
+  <exec_depend>pointcloud_to_laserscan</exec_depend>
+
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_cmake_flake8</test_depend>
+  <test_depend>ament_cmake_pep257</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>rclpy</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

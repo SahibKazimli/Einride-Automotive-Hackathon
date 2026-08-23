@@ -41,24 +41,32 @@
 
 # Only the front wheels are physically instrumented; this is the honest
 # proprioceptive stream. /joint_states carries all six for TF purposes.
+# SENSOR_DATA, matching qos_profile_sensor_data in ugv02_serial_node.py.
 - ros_topic_name: "/wheel_encoders"
   gz_topic_name: "/wheel_encoders"
   ros_type_name: "sensor_msgs/msg/JointState"
   gz_type_name: "gz.msgs.Model"
   direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
 
 # --- IMU ---------------------------------------------------------------------
+# qos_profile below matches qos_profile_sensor_data, which ugv02_serial_node.py
+# publishes these three streams with on hardware. Without the key the bridge
+# uses the rclcpp default, which is reliable - and note that a subscriber
+# requesting RELIABLE receives nothing at all from a best-effort publisher.
 - ros_topic_name: "/imu"
   gz_topic_name: "/imu"
   ros_type_name: "sensor_msgs/msg/Imu"
   gz_type_name: "gz.msgs.IMU"
   direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
 
 - ros_topic_name: "/mag"
   gz_topic_name: "/mag"
   ros_type_name: "sensor_msgs/msg/MagneticField"
   gz_type_name: "gz.msgs.Magnetometer"
   direction: GZ_TO_ROS
+  qos_profile: SENSOR_DATA
 
 # --- 2D lidar ----------------------------------------------------------------
 - ros_topic_name: "/scan"
