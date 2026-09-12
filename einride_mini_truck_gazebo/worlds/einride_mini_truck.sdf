@@ -114,6 +114,18 @@
       </link>
     </model>
 
+    <!-- Delivery target. Placed 2.5 m down +X and turned to face the robot:
+         the dock's own +X is its approach direction, so yaw pi points that
+         opening back at the origin where the rover spawns. Composing this pose
+         with the model's dock_approach_pose frame (0.326, 0, 0, yaw pi) puts a
+         correctly docked rover at world (2.174, 0, yaw 0). Geometry, tag size
+         and the docked pose are specified in DOCK_PLAN.md. -->
+    <include>
+      <uri>model://warehouse_dock_a</uri>
+      <name>warehouse_dock_a</name>
+      <pose>2.5 0 0 0 0 3.14159265</pose>
+    </include>
+
     <include>
       <uri>model://einride_mini_truck</uri>  <!-- model:// is fine here: only Gazebo parses the world -->
       <name>einride_mini_truck</name>

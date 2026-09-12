@@ -6,6 +6,10 @@
   <description>Gazebo-specific implementations for the einride_mini_truck project</description>
   <maintainer email="vladyslav.aleksashyn@einride.tech">Vladyslav Aleksashyn</maintainer>
   <license>Apache 2.0</license>
+  <!-- The vendored Fuel prop meshes and textures under props/ are third-party and
+       public domain. CC0 requires no attribution; declared so the package's
+       licensing is self-describing. See props/README.md for provenance. -->
+  <license file="props/LICENSE.CC0">CC0-1.0</license>
   <author>Michael Carroll</author>
   <author>Dharini Dutia</author>
 

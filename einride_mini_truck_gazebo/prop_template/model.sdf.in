@@ -1,0 +1,74 @@
+<?xml version="1.0" ?>
+<!--
+  @PROP_DIR@ - a third-party Gazebo Fuel prop, vendored into this package.
+
+  GENERATED FILE - do not edit. The source is prop_template/model.sdf.in plus the
+  one scale table in props/props.cmake. The mesh and textures under meshes/ and
+  materials/ are UPSTREAM AND BYTE-FOR-BYTE UNMODIFIED (props/MANIFEST.sha256);
+  props/README.md carries provenance and the CC0-1.0 licence, and
+  props/@PROP_DIR@/AABB.md records the measured bounds this scale was chosen
+  against.
+
+  WHY THIS FILE EXISTS INSTEAD OF UPSTREAM'S model.sdf
+
+  Upstream's is wrong for this arena in three independent ways, each verified by
+  reading the asset rather than guessed at:
+
+  - Construction Barrel ships mass 500 kg with a hand-written inertia tensor and
+    <inertial><pose>0 0 0.4</pose>, and NO <static>. <mesh><scale> scales neither
+    mass nor inertia nor that pose, so a scaled-down barrel becomes a 279 mm body
+    weighing half a tonne whose centre of mass sits 121 mm outside its own
+    geometry - a guaranteed jitter and tip-over source.
+  - Jersey Barrier's collision is not a mesh at all: six hand-written boxes at
+    4.06542 m. <mesh><scale> does nothing to them, so scaling the visual would
+    leave a 732 mm barrier with a 4 m INVISIBLE wall across the arena.
+  - Both would make the arena's geometry a function of contact history, so the
+    arena would stop being the fixed map every measurement of it assumes.
+
+  We keep upstream's art, which is what the asset is for, and take ownership of
+  the physics, which is where the bugs are.
+-->
+<sdf version="1.10">
+  <model name="@PROP_DIR@">
+
+    <!-- Forced static, and the upstream <inertial> block deliberately deleted
+         rather than left behind, so that flipping this flag cannot silently
+         resurrect a physically impossible body.
+
+         Static is also the cheap choice: arena.sdf runs max_step_size 0.001, so a
+         dynamic prop with a mesh collision would cost a narrowphase query every
+         millisecond of simulated time, forever, and buy nothing - a 2.4 kg rover
+         cannot move any of these. -->
+    <static>true</static>
+
+    <link name="link">
+      <!-- Puts the mesh's measured min-z on the floor and its footprint on the
+           model origin. Zero for all three of these assets because they are
+           authored that way; see props.cmake for why it is still parameterised. -->
+      <pose>0 @PROP_Y_OFFSET@ @PROP_Z_OFFSET@ 0 0 0</pose>
+
+      <visual name="visual">
+        <geometry>
+          <mesh>
+            <uri>model://@PROP_DIR@/@PROP_MESH@</uri>
+            <scale>@PROP_SCALE@ @PROP_SCALE@ @PROP_SCALE@</scale>
+          </mesh>
+        </geometry>
+      </visual>
+
+      <!-- The SAME mesh at the SAME scale, not a fitted primitive. Both numbers
+           come from the single @PROP_SCALE@ substitution, so a visual/collision
+           mismatch is not merely unlikely, it is unrepresentable. An AABB box
+           around the cone would also over-approximate it by about 2x. -->
+      <collision name="collision">
+        <geometry>
+          <mesh>
+            <uri>model://@PROP_DIR@/@PROP_MESH@</uri>
+            <scale>@PROP_SCALE@ @PROP_SCALE@ @PROP_SCALE@</scale>
+          </mesh>
+        </geometry>
+      </collision>
+    </link>
+
+  </model>
+</sdf>

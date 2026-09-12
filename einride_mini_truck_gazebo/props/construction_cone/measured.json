@@ -1,0 +1,52 @@
+{
+  "mesh": "props/construction_cone/meshes/construction_cone.dae",
+  "collada_unit_meter": 0.0254,
+  "up_axis": "Z_UP",
+  "triangles": 166,
+  "sdf_scale": 10.0,
+  "extra_scale": 0.25,
+  "total_scale": 2.5,
+  "aabb_min_m": [
+    -0.062865,
+    -0.062865,
+    0.0
+  ],
+  "aabb_max_m": [
+    0.062865,
+    0.062865,
+    0.272222
+  ],
+  "size_mm": [
+    125.73,
+    125.73,
+    272.22
+  ],
+  "origin_offset_mm": [
+    -62.87,
+    -62.87,
+    0.0
+  ],
+  "band_m": [
+    0.08,
+    0.18
+  ],
+  "band_footprint_mm": [
+    74.88,
+    74.88
+  ],
+  "scan_plane_m": 0.145,
+  "scan_plane_extent_mm": [
+    58.78,
+    58.78
+  ],
+  "scan_plane_hull_area_mm2": 2591.4,
+  "scan_plane_hull_perimeter_mm": 182.6,
+  "beam_returns": {
+    "1m": 4.2,
+    "2m": 2.1,
+    "4m": 1.1,
+    "6m": 0.7
+  },
+  "spans_band": true,
+  "band_ok": true
+}

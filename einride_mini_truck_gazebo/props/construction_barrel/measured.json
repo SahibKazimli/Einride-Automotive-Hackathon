@@ -1,0 +1,52 @@
+{
+  "mesh": "props/construction_barrel/meshes/construction_barrel.dae",
+  "collada_unit_meter": 0.0254,
+  "up_axis": "Z_UP",
+  "triangles": 1184,
+  "sdf_scale": 1.0,
+  "extra_scale": 0.18,
+  "total_scale": 0.18,
+  "aabb_min_m": [
+    -0.091788,
+    -0.091788,
+    0.0
+  ],
+  "aabb_max_m": [
+    0.091788,
+    0.091788,
+    0.279007
+  ],
+  "size_mm": [
+    183.58,
+    183.58,
+    279.01
+  ],
+  "origin_offset_mm": [
+    -91.79,
+    -91.79,
+    0.0
+  ],
+  "band_m": [
+    0.08,
+    0.18
+  ],
+  "band_footprint_mm": [
+    102.73,
+    102.73
+  ],
+  "scan_plane_m": 0.145,
+  "scan_plane_extent_mm": [
+    98.79,
+    98.79
+  ],
+  "scan_plane_hull_area_mm2": 7578.3,
+  "scan_plane_hull_perimeter_mm": 309.5,
+  "beam_returns": {
+    "1m": 7.1,
+    "2m": 3.5,
+    "4m": 1.8,
+    "6m": 1.2
+  },
+  "spans_band": true,
+  "band_ok": true
+}

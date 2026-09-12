@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<model>
+  <name>@PROP_DIR@</name>
+  <version>1.0</version>
+  <sdf version="1.10">model.sdf</sdf>
+
+  <author>
+    <name>Vendored from Gazebo Fuel; SDF by Vladyslav Aleksashyn</name>
+    <email>vladyslav.aleksashyn@einride.tech</email>
+  </author>
+
+  <description>
+    Arena prop @PROP_DIR@, scaled @PROP_SCALE@ for the einride-mini-truck arena.
+    GENERATED from prop_template/model.config.in - do not edit.
+    Mesh and textures are upstream and unmodified (CC0-1.0); the SDF is ours.
+    See props/README.md for provenance and props/@PROP_DIR@/AABB.md for the
+    measured bounds behind the scale.
+  </description>
+</model>

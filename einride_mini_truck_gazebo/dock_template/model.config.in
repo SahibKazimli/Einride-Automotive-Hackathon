@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<model>
+  <name>@DOCK_MODEL@</name>
+  <version>1.0</version>
+  <sdf version="1.10">model.sdf</sdf>
+
+  <author>
+    <name>Vladyslav Aleksashyn</name>
+    <email>vladyslav.aleksashyn@einride.tech</email>
+  </author>
+
+  <description>
+    Warehouse delivery dock @DOCK_LETTER@, tag36h11 id @DOCK_TAG_ID@.
+    GENERATED from dock_template/model.config.in - do not edit.
+    Dock: a shallow trapezoidal bay, 400 mm back wall with a
+    100 mm tag36h11 AprilTag at z=102 mm, plus two 240 mm wings flared at 45 deg
+    so a 2D LiDAR sees three segments and can fix x, y and yaw. Stepped skyline
+    above the sensing band - wing tops at 260, back wall 350, wordmark crown
+    410, identity pylon 530 - with a dark accent band wrapping the inner faces
+    at z 200-260. Everything decorative sits clear of the frozen 80-180 mm scan
+    band and of the tag; see DOCK_PLAN.md 3.3. Geometry is specified in
+    DOCK_PLAN.md; the dock_approach_pose frame gives the docked pose of the
+    rover's base_footprint.
+  </description>
+</model>

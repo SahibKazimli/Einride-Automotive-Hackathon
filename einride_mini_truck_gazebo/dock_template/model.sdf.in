@@ -1,0 +1,388 @@
+<?xml version="1.0" ?>
+<!--
+  @DOCK_MODEL@: dock @DOCK_LETTER@, carrying tag36h11 id @DOCK_TAG_ID@.
+
+  GENERATED FILE - do not edit. The source is dock_template/model.sdf.in, and
+  CMakeLists.txt configures it once per dock so that all eight docks share one
+  set of numbers. The eight differ only in the two identity textures and the
+  name.
+
+  This is the delivery target the rover drives into.
+
+  Built to DOCK_PLAN.md, which is the single source of truth for the geometry.
+  All numbers there are millimetres; SDF is metres, so every dimension below is
+  that value divided by 1000.
+
+  Shape is a shallow trapezoidal bay - a flat back wall carrying the AprilTag
+  plus two wings flared out at exactly 45 deg. A flat wall would leave position
+  ALONG the wall unobservable to a 2D LiDAR, so a scan match against it slides
+  sideways; three segments meeting at two known angles constrain x, y and yaw.
+  The 45 deg flare is what makes the dock distinguishable from a straight wall
+  (0 deg) and a box corner (90 deg), so do not round it off. The wings are a
+  perception feature and a soft limit, NOT a funnel: a skid-steer drivetrain has
+  very high lateral friction, so a robot that touches a wing pushes and stalls
+  rather than sliding into alignment.
+
+  Frame: origin at floor level on the centre of the back wall's inner face.
+  +X out of the dock into the arena (the approach direction), +Y left as seen
+  from the dock looking outward, +Z up. The bay occupies positive X, so a robot
+  approaching the dock travels in -X.
+
+  All panels are 8 mm thick boxes rather than meshes: no external asset to keep
+  in sync, and the small mitre overlap where a wing meets the back wall is
+  harmless. Every panel is solid from the floor up - a panel on legs would let
+  the LiDAR scan plane pass under it and see two thin posts instead of a wall.
+
+  ==========================================================================
+  WHAT THE APPEARANCE IS ALLOWED TO TOUCH
+
+  Everything the robot senses lives in a narrow slice of this model, so the
+  styling below is confined to the parts that are provably outside it:
+
+    inner faces, z  80..180  FROZEN. Planar, continuous, light, matte. This is
+                             the mandated legal scan-height band and the whole
+                             of the LiDAR contract.
+    tag plate + margin       FROZEN. y +-62.5, z 39.5..164.5, and nothing
+                             decorative below z=200, which leaves 20 mm of
+                             light wall above the band and 35.5 mm above the
+                             plate.
+    inward protrusions
+    below z=180              FORBIDDEN. Occlusion or shadow on the tag, and
+                             DOCK_PLAN.md 7.2 already bans anything standing in
+                             the bay footprint.
+    inner faces, z 200..350  Free - texture and geometry. No legal scan height
+                             reaches it.
+    above z=350, and the
+    outer faces              Free. The robot never sees these from the bay.
+
+  So: the accent band, the crown, the pylon and the stepped wing tops are all at
+  z >= 200. Nothing below that moved. Two side effects are improvements rather
+  than costs - the panels went from 0.82 to 0.90 diffuse, which is MORE
+  reflective in the band, not less; and the added pattern gives the OAK-D's
+  stereo pair something to correlate on, where a blank wall is close to its
+  worst case.
+
+  The one rule that holds everywhere: keep it matte. Gloss anywhere near the tag
+  specular-blows-out under arena lights.
+-->
+<sdf version="1.10">
+  <model name="@DOCK_MODEL@">
+    <static>true</static>
+
+    <link name="dock_body">
+
+      <!-- ============================ walls ============================ -->
+
+      <!-- Back wall: 8 x 400 x 350, inner face at x=0, spans y -200..+200.
+           Deliberately left as one monolithic panel. DOCK_PLAN.md 7.3 holds it
+           to +-1.0 mm flatness over its 400 mm because that error lands
+           directly in the tag pose, and a horizontal joint here would be the
+           easiest way to lose that. The accent band is applied over it rather
+           than built into it for the same reason. -->
+      <visual name="back_wall_visual">
+        <pose>-0.004 0 0.175 0 0 0</pose>
+        <geometry><box><size>0.008 0.400 0.350</size></box></geometry>
+        <!-- Off-white and matte: ~90 % reflectivity gives the LiDAR full range,
+             where a dark or glossy dock returns weakly. -->
+        <material>
+          <ambient>0.62 0.62 0.62 1</ambient>
+          <diffuse>0.90 0.90 0.89 1</diffuse>
+          <specular>0.04 0.04 0.04 1</specular>
+        </material>
+      </visual>
+      <collision name="back_wall_collision">
+        <pose>-0.004 0 0.175 0 0 0</pose>
+        <geometry><box><size>0.008 0.400 0.350</size></box></geometry>
+      </collision>
+
+      <!-- Wings, each split into two coplanar 120 mm sections so the tops can
+           step. The split falls at the 120 mm mark, which is exactly where
+           DOCK_PLAN.md 7.2 already seams the wing for printing - so this costs
+           no extra parts, only a shorter outer one.
+
+           Both sections share one inner-face plane and abut exactly at the
+           seam, so the LiDAR still sees one unbroken line. Full wing inner face
+           runs (0, 200) -> (169.71, 369.71); local +X points at the mouth, and
+           each centre is its section's inner-face midpoint offset 4 mm along
+           the panel's outward normal.
+
+           Inner sections stay 350 tall. Outer sections drop to 260, which is
+           what gives the dock its stepped skyline; 260 is still 80 mm clear
+           above the 180 mm top of the mandated band, so the wall the LiDAR
+           needs is untouched. -->
+      <visual name="left_wing_inner_visual">
+        <pose>0.03960 0.24525 0.175 0 0 0.785398</pose>
+        <geometry><box><size>0.120 0.008 0.350</size></box></geometry>
+        <material>
+          <ambient>0.62 0.62 0.62 1</ambient>
+          <diffuse>0.90 0.90 0.89 1</diffuse>
+          <specular>0.04 0.04 0.04 1</specular>
+        </material>
+      </visual>
+      <collision name="left_wing_inner_collision">
+        <pose>0.03960 0.24525 0.175 0 0 0.785398</pose>
+        <geometry><box><size>0.120 0.008 0.350</size></box></geometry>
+      </collision>
+
+      <visual name="left_wing_outer_visual">
+        <pose>0.12445 0.33011 0.130 0 0 0.785398</pose>
+        <geometry><box><size>0.120 0.008 0.260</size></box></geometry>
+        <material>
+          <ambient>0.62 0.62 0.62 1</ambient>
+          <diffuse>0.90 0.90 0.89 1</diffuse>
+          <specular>0.04 0.04 0.04 1</specular>
+        </material>
+      </visual>
+      <collision name="left_wing_outer_collision">
+        <pose>0.12445 0.33011 0.130 0 0 0.785398</pose>
+        <geometry><box><size>0.120 0.008 0.260</size></box></geometry>
+      </collision>
+
+      <!-- Right wing: the left wing mirrored in Y. -->
+      <visual name="right_wing_inner_visual">
+        <pose>0.03960 -0.24525 0.175 0 0 -0.785398</pose>
+        <geometry><box><size>0.120 0.008 0.350</size></box></geometry>
+        <material>
+          <ambient>0.62 0.62 0.62 1</ambient>
+          <diffuse>0.90 0.90 0.89 1</diffuse>
+          <specular>0.04 0.04 0.04 1</specular>
+        </material>
+      </visual>
+      <collision name="right_wing_inner_collision">
+        <pose>0.03960 -0.24525 0.175 0 0 -0.785398</pose>
+        <geometry><box><size>0.120 0.008 0.350</size></box></geometry>
+      </collision>
+
+      <visual name="right_wing_outer_visual">
+        <pose>0.12445 -0.33011 0.130 0 0 -0.785398</pose>
+        <geometry><box><size>0.120 0.008 0.260</size></box></geometry>
+        <material>
+          <ambient>0.62 0.62 0.62 1</ambient>
+          <diffuse>0.90 0.90 0.89 1</diffuse>
+          <specular>0.04 0.04 0.04 1</specular>
+        </material>
+      </visual>
+      <collision name="right_wing_outer_collision">
+        <pose>0.12445 -0.33011 0.130 0 0 -0.785398</pose>
+        <geometry><box><size>0.120 0.008 0.260</size></box></geometry>
+      </collision>
+
+      <!-- ======================= crown and pylon ======================= -->
+
+      <!-- Crown: 8 x 400 x 60 capping the back wall, top edge at z=410. It
+           carries the wordmark as its own surface texture rather than on a
+           proud plate - authored at the 400:60 face aspect, so the dark field
+           around the mark IS the panel and there is no seam to match or
+           z-fight.
+
+           NOTE the wordmark is a placeholder set in Nimbus Sans, not the real
+           logotype. Drop the brand asset in over materials/textures/wordmark.png
+           at the same 400:60 aspect and nothing else needs to change. -->
+      <visual name="crown_visual">
+        <pose>-0.004 0 0.380 0 0 0</pose>
+        <geometry><box><size>0.008 0.400 0.060</size></box></geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0 0 0 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://@DOCK_MODEL@/materials/textures/wordmark.png</albedo_map>
+              <metalness>0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <collision name="crown_collision">
+        <pose>-0.004 0 0.380 0 0 0</pose>
+        <geometry><box><size>0.008 0.400 0.060</size></box></geometry>
+      </collision>
+
+      <!-- Pylon: 8 x 160 x 120 centred on the crown, top edge at z=530. Carries
+           the dock identity letter, again as its own face texture at the 160:120
+           aspect. This is dock @DOCK_LETTER@, and the letter always matches
+           the tag id, so the human-readable marking and the machine-readable
+           one cannot drift apart.
+
+           This is also where DOCK_PLAN.md 4.2's optional second tag goes if
+           discovery is ever needed: a 150 mm tag centred at z=470 replaces the
+           letter and needs no new structure, where the original variant had to
+           raise the whole back wall to 500 mm to find the room. -->
+      <visual name="pylon_visual">
+        <pose>-0.004 0 0.470 0 0 0</pose>
+        <geometry><box><size>0.008 0.160 0.120</size></box></geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0 0 0 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://@DOCK_MODEL@/materials/textures/@DOCK_LETTER_TEXTURE@</albedo_map>
+              <metalness>0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+      <collision name="pylon_collision">
+        <pose>-0.004 0 0.470 0 0 0</pose>
+        <geometry><box><size>0.008 0.160 0.120</size></box></geometry>
+      </collision>
+
+      <!-- ========================= accent band ========================= -->
+
+      <!-- A dark band wrapping all three inner faces at z 200..260, 1 mm proud
+           of the wall the way applied vinyl would be. This is the one styling
+           element on the surface the robot actually looks at, and it is what
+           keeps the wall from being a blank field; it also ties the outer wings'
+           new 260 mm top edge into the composition, since that edge is exactly
+           the top of the band.
+
+           z 200..260 is chosen, not convenient: 20 mm above the 180 mm ceiling
+           of the mandated LiDAR band, and 35.5 mm above the tag plate's top
+           edge at 164.5. No collision - it is paint, not structure.
+
+           One overlay per wing covers both of that wing's sections, because the
+           two are coplanar. -->
+      <visual name="back_wall_band_visual">
+        <pose>0.0005 0 0.230 0 0 0</pose>
+        <geometry><box><size>0.001 0.400 0.060</size></box></geometry>
+        <material>
+          <ambient>0.050 0.050 0.055 1</ambient>
+          <diffuse>0.085 0.085 0.095 1</diffuse>
+          <specular>0.02 0.02 0.02 1</specular>
+        </material>
+      </visual>
+
+      <visual name="left_wing_band_visual">
+        <pose>0.08520 0.28450 0.230 0 0 0.785398</pose>
+        <geometry><box><size>0.240 0.001 0.060</size></box></geometry>
+        <material>
+          <ambient>0.050 0.050 0.055 1</ambient>
+          <diffuse>0.085 0.085 0.095 1</diffuse>
+          <specular>0.02 0.02 0.02 1</specular>
+        </material>
+      </visual>
+
+      <visual name="right_wing_band_visual">
+        <pose>0.08520 -0.28450 0.230 0 0 -0.785398</pose>
+        <geometry><box><size>0.240 0.001 0.060</size></box></geometry>
+        <material>
+          <ambient>0.050 0.050 0.055 1</ambient>
+          <diffuse>0.085 0.085 0.095 1</diffuse>
+          <specular>0.02 0.02 0.02 1</specular>
+        </material>
+      </visual>
+
+      <!-- ============================= tag ============================= -->
+
+      <!-- AprilTag tag36h11 id 0, centred at z=102 mm - on the OAK-D Lite's
+           optical axis. DOCK_PLAN.md asks for "a base-mounted camera height"
+           and assumed 200 mm; the rover's camera is actually at z=101.953 mm
+           (oak_d_lite_link on base_footprint, which rests at z~0), so 102 mm
+           is that intent with the measured number. A tag mounted high would
+           force a camera mast, which then punches a hole in the robot's own
+           LiDAR scan plane.
+
+           Centring on the axis rather than above it is what makes the tag
+           usable at close range. The vertical half-FOV is 27.0 deg
+           (atan(390/765.33)), so the standoff at which the 100 mm black
+           square still fits the frame is set by how far the tag's furthest
+           edge sits off the optical axis:
+
+             tag centre z    black square in frame from   whole plate from
+                200 mm              231 mm standoff           256 mm
+                140 mm              114 mm                    138 mm
+                102 mm               39 mm                     64 mm
+
+           At 200 mm the tag was invisible over almost all of the 150-250 mm
+           scoring window. On the axis it clears the window by a factor of
+           four, and pitch and ride-height changes now move the tag towards
+           the middle of the frame instead of out of the top of it.
+           Horizontal never binds: 34.5 deg half-FOV takes the 125 mm plate
+           down to a 32 mm standoff.
+
+           Measured against that prediction, in 2 mm steps: detection starts
+           at a 39 +/- 1 mm standoff (38 fails, 40 detects at margin 72) and
+           holds unbroken out to 3 m, the far end of the sweep. At the 200 mm
+           docked pose the tag lands within 0.1 mm of the optical axis, its
+           black square measures 100.0 mm, and the recovered range is 0.6 mm
+           long. Range bias grows with distance as it always does on a 100 mm
+           tag - +11 mm at 1 m, +97 mm at 3 m - so trust the tag for bearing
+           at range and for range only up close.
+
+           The plate is 125 mm square, NOT 100 mm. The source PNG is 10 x 10
+           cells - an 8 x 8 tag inside a 1-cell white margin - so the black
+           border square covers 8/10 of the plate: 125 * 8/10 = 100 mm, which is
+           the figure apriltag_ros wants in `size` (size: 0.100). Sizing the
+           plate to 100 mm would give an 80 mm black square and put every
+           downstream pose estimate 20 % out.
+
+           The texture is upscaled from 10 x 10 to 1000 x 1000 with
+           nearest-neighbour only; any smooth filter blurs the cell edges and
+           the detector stops seeing it.
+
+           1 mm thick and centred at x=0.0005, so the visible face sits 1 mm
+           proud of the wall's inner face and cannot z-fight with it. A detector
+           therefore reports the tag plane at x=1 mm, not x=0. No collision
+           geometry - the tag is paint, not structure.
+
+           The plate now spans z 39.5..164.5 mm, so it crosses the 80-180 mm
+           LiDAR band that the wall height is chosen to cover - on this rover
+           the scan plane at z=145 mm passes over the tag. That is a print
+           consideration, not a modelling one: gz-sim's gpu_lidar ignores
+           material, and the plate is only 1 mm proud, well under the LD19P's
+           15 mm range noise (measured: it leaves the back-wall segment fit
+           unchanged). On the physical dock, matte black paper in the scan band
+           returns more weakly than the surrounding light panel. The 200 mm
+           baseline overlapped the same band at 137.5..180 mm, so this is not a
+           new problem, and no tag height avoids it - clearing the band
+           entirely would need the plate below z=17.5 mm, i.e. underground.
+
+           This dock carries id @DOCK_TAG_ID@. See the dock table in
+           DOCK_PLAN.md 3.4 for the full letter/id/pose assignment. -->
+      <visual name="apriltag_visual">
+        <pose>0.0005 0 0.102 0 0 0</pose>
+        <geometry><box><size>0.001 0.125 0.125</size></box></geometry>
+        <material>
+          <ambient>1 1 1 1</ambient>
+          <diffuse>1 1 1 1</diffuse>
+          <specular>0 0 0 1</specular>
+          <pbr>
+            <metal>
+              <albedo_map>model://@DOCK_MODEL@/materials/textures/@DOCK_TAG_TEXTURE@</albedo_map>
+              <metalness>0</metalness>
+              <roughness>0.9</roughness>
+            </metal>
+          </pbr>
+        </material>
+      </visual>
+
+    </link>
+
+    <!-- Pose of a correctly docked robot, in the dock frame. Delivery is
+         defined as arrival here; nothing is physically transferred.
+
+         This is the pose of the rover's MODEL ORIGIN, which is base_footprint -
+         the frame DiffDrive publishes odom against - not base_link.
+
+         Derived from einride_mini_truck_description rather than assumed. The
+         rover's front-most point is the front wheel outer edge: wheel link at
+         x=+0.08596 with a mesh reaching +0.040, so +0.12596 ahead of
+         base_footprint (the chassis mesh itself stops at +0.12306, and
+         base_link sits 0.46 mm ahead of base_footprint). Overall length is
+         0.2510 m and base_footprint is centred in it to within 0.5 mm.
+         Front face 200 mm off the back wall therefore puts base_footprint at
+         0.200 + 0.12596 = 0.32596, i.e. 0.326 to the nearest millimetre.
+
+         Yaw 180 deg: the robot's +X points at the back wall.
+
+         Scoring tolerance is standoff 150-250 mm, yaw error < 6 deg,
+         stationary for 2 s - so the 200 mm nominal has 50 mm either way. -->
+    <frame name="dock_approach_pose">
+      <pose>0.326 0 0 0 0 3.14159265</pose>
+    </frame>
+
+  </model>
+</sdf>

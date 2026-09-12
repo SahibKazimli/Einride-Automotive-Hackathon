@@ -94,6 +94,117 @@ install(
 )
 
 
+# The eight warehouse docks are generated from one template rather than
+# checked in eight times over. dock_template/model.sdf.in holds every
+# dimension once - see DOCK_PLAN.md, which is the spec it is built to - and the
+# docks differ only in their two identity textures and their name. Copying the
+# file eight times would mean eight places to miss when a number changes, and
+# the numbers in it are load-bearing for both the LiDAR and the tag.
+#
+# Generated models land in the worlds/ install tree on purpose: the environment
+# hook already exports share/${PROJECT_NAME}/worlds on GZ_SIM_RESOURCE_PATH, so
+# model://warehouse_dock_a resolves with no change to the hooks.
+#
+# Each entry is "<letter> <tag id>". The letter is what a human reads off the
+# pylon and the id is what apriltag_ros reports; keeping them paired here is
+# what stops the two markings drifting apart.
+set(DOCK_ASSIGNMENTS "A 0" "B 1" "C 2" "D 3" "E 4" "F 5" "G 6" "H 7")
+
+foreach(assignment IN LISTS DOCK_ASSIGNMENTS)
+  separate_arguments(parts UNIX_COMMAND "${assignment}")
+  list(GET parts 0 DOCK_LETTER)
+  list(GET parts 1 DOCK_TAG_ID)
+  string(TOLOWER "${DOCK_LETTER}" dock_letter_lower)
+
+  set(DOCK_MODEL "warehouse_dock_${dock_letter_lower}")
+  set(DOCK_LETTER_TEXTURE "letter_${dock_letter_lower}.png")
+  # apriltag-imgs names its files with a 5-digit zero-padded id
+  string(REGEX REPLACE "^(.)$" "0000\\1" padded_id "${DOCK_TAG_ID}")
+  set(DOCK_TAG_TEXTURE "tag36h11_${padded_id}.png")
+
+  set(dock_out "${CMAKE_CURRENT_BINARY_DIR}/docks/${DOCK_MODEL}")
+  configure_file(dock_template/model.sdf.in    "${dock_out}/model.sdf"    @ONLY)
+  configure_file(dock_template/model.config.in "${dock_out}/model.config" @ONLY)
+
+  # Only the textures this dock actually references, so each model stays
+  # self-contained the way Gazebo expects.
+  file(COPY
+    "dock_template/textures/${DOCK_TAG_TEXTURE}"
+    "dock_template/textures/${DOCK_LETTER_TEXTURE}"
+    "dock_template/textures/wordmark.png"
+    DESTINATION "${dock_out}/materials/textures"
+  )
+
+  install(
+    DIRECTORY "${dock_out}"
+    DESTINATION share/${PROJECT_NAME}/worlds
+  )
+  message(STATUS "Dock ${DOCK_LETTER}: ${DOCK_MODEL}, tag36h11 id ${DOCK_TAG_ID}")
+endforeach()
+
+
+# The arena props are third-party Gazebo Fuel assets, vendored so that a fresh
+# clone plus `colcon build` plus launch works with no ~/.gz/fuel cache and no
+# network. Upstream meshes and textures are byte-for-byte (props/MANIFEST.sha256);
+# the model.sdf and model.config are ours and generated, for the reasons spelled
+# out in prop_template/model.sdf.in.
+#
+# Same shape as the dock loop above, and for the same reason: the scale and offsets
+# are load-bearing for the LiDAR, so they live in exactly one place
+# (props/props.cmake) rather than being copy-pasted per prop.
+#
+# Generated models land in the worlds/ install tree, like the docks, because the
+# environment hook already exports share/${PROJECT_NAME}/worlds on
+# GZ_SIM_RESOURCE_PATH - so model://construction_barrel resolves with no change to
+# hooks/.
+include(props/props.cmake)
+
+foreach(assignment IN LISTS PROP_ASSIGNMENTS)
+  separate_arguments(parts UNIX_COMMAND "${assignment}")
+  list(GET parts 0 PROP_DIR)
+  list(GET parts 1 PROP_SCALE)
+  list(GET parts 2 PROP_Z_OFFSET)
+  list(GET parts 3 PROP_Y_OFFSET)
+
+  set(prop_src "${CMAKE_CURRENT_SOURCE_DIR}/props/${PROP_DIR}")
+
+  # Deliberately a hard failure, not a download. Fetching at build time would make
+  # the build non-reproducible and require network in CI; the whole point of
+  # vendoring is that the bytes are already in git.
+  if(NOT EXISTS "${prop_src}/mesh.txt")
+    message(FATAL_ERROR
+      "props/${PROP_DIR} is not vendored. Run tools/fetch_props.sh once, with a "
+      "network, and commit the result. This package does not download at build time.")
+  endif()
+  file(READ "${prop_src}/mesh.txt" PROP_MESH)
+  string(STRIP "${PROP_MESH}" PROP_MESH)
+  if(NOT EXISTS "${prop_src}/${PROP_MESH}")
+    message(FATAL_ERROR "props/${PROP_DIR}/${PROP_MESH} is missing")
+  endif()
+
+  set(prop_out "${CMAKE_CURRENT_BINARY_DIR}/props/${PROP_DIR}")
+  configure_file(prop_template/model.sdf.in    "${prop_out}/model.sdf"    @ONLY)
+  configure_file(prop_template/model.config.in "${prop_out}/model.config" @ONLY)
+
+  install(FILES "${prop_out}/model.sdf" "${prop_out}/model.config"
+          DESTINATION share/${PROJECT_NAME}/worlds/${PROP_DIR})
+  # Installed straight from the source tree rather than copied via the build dir:
+  # the dock loop's file(COPY) runs at CONFIGURE time, so an edited asset does not
+  # reach the install tree until cmake re-runs. Not a wart worth propagating.
+  install(DIRECTORY "props/${PROP_DIR}/meshes"
+          DESTINATION share/${PROJECT_NAME}/worlds/${PROP_DIR})
+  if(EXISTS "${prop_src}/materials")
+    install(DIRECTORY "props/${PROP_DIR}/materials"
+            DESTINATION share/${PROJECT_NAME}/worlds/${PROP_DIR})
+  endif()
+  # Licence and provenance travel with the assets, not only with the repo.
+  install(FILES props/README.md props/LICENSE.CC0 props/MANIFEST.sha256
+          DESTINATION share/${PROJECT_NAME}/worlds/${PROP_DIR})
+
+  message(STATUS "Prop ${PROP_DIR}: scale ${PROP_SCALE}, mesh ${PROP_MESH}")
+endforeach()
+
+
 # Following directives are used when testing.
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

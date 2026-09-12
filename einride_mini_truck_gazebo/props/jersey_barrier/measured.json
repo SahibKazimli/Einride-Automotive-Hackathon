@@ -1,0 +1,52 @@
+{
+  "mesh": "props/jersey_barrier/meshes/jersey_barrier.dae",
+  "collada_unit_meter": 0.0254,
+  "up_axis": "Z_UP",
+  "triangles": 432,
+  "sdf_scale": 1.0,
+  "extra_scale": 0.18,
+  "total_scale": 0.18,
+  "aabb_min_m": [
+    -0.365901,
+    -0.073152,
+    0.0
+  ],
+  "aabb_max_m": [
+    0.365901,
+    0.073152,
+    0.20574
+  ],
+  "size_mm": [
+    731.8,
+    146.3,
+    205.74
+  ],
+  "origin_offset_mm": [
+    -365.9,
+    -73.15,
+    0.0
+  ],
+  "band_m": [
+    0.08,
+    0.18
+  ],
+  "band_footprint_mm": [
+    731.8,
+    71.13
+  ],
+  "scan_plane_m": 0.145,
+  "scan_plane_extent_mm": [
+    731.8,
+    63.05
+  ],
+  "scan_plane_hull_area_mm2": 46084.6,
+  "scan_plane_hull_perimeter_mm": 1577.8,
+  "beam_returns": {
+    "1m": 52.4,
+    "2m": 26.2,
+    "4m": 13.1,
+    "6m": 8.7
+  },
+  "spans_band": true,
+  "band_ok": true
+}
