@@ -212,7 +212,12 @@ class Ugv02SerialNode(Node):
 
     def _declare_parameters(self) -> None:
         """Declare every tunable. Nothing in this node is hardcoded."""
-        self.declare_parameter('port', '/dev/ttyAMA0')
+        # The udev symlink from einride_mini_truck_bringup/udev, not the raw
+        # ttyACM* the bridge happens to enumerate as. config/hardware.yaml
+        # sets this in every launch; the default only matters to a bare
+        # `ros2 run`, where failing against the name the project actually
+        # uses says more than failing against an arbitrary one.
+        self.declare_parameter('port', '/dev/ugv02')
         self.declare_parameter('baud', 115200)
         self.declare_parameter('wheel_radius', 0.040)
         self.declare_parameter(

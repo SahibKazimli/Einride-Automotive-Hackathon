@@ -7,9 +7,13 @@
   ros__parameters:
 
     # --- link ---------------------------------------------------------------
-    # The chassis MCU is on the Pi/Jetson header UART, 115200 8N1, newline
-    # delimited JSON both directions.
-    port: /dev/ttyAMA0
+    # The chassis MCU speaks 115200 8N1, newline delimited JSON both
+    # directions, over a CH343 USB-serial bridge. That bridge is CDC-ACM, so it
+    # enumerates as an arbitrary ttyACM* depending on what else was plugged in
+    # first; /dev/ugv02 is the stable name that this project's own
+    # einride_mini_truck_bringup/udev/99-einride-ugv02.rules gives it. On a
+    # machine where those rules are not installed, name the raw device here.
+    port: /dev/ugv02
     baud: 115200
 
     # --- geometry -----------------------------------------------------------
@@ -20,8 +24,6 @@
 
     # Only the front wheels are instrumented. Spelled exactly as in model.sdf,
     # left first, then right - the order the MCU sends odl/odr in.
-    # UNVERIFIED: which pair actually carries encoders is taken on trust. If the
-    # robot proves otherwise this is the only place that needs changing.
     encoder_joint_names:
       - left_up_wheel_link_joint
       - right_up_wheel_link_joint

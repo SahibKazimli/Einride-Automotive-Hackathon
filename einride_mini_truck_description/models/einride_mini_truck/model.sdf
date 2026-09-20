@@ -443,14 +443,23 @@
          so it is reused as-is; Luxonis' own mesh is in ros-jazzy-depthai-descriptions
          if an exact model is ever wanted.
 
-         Modelled as TWO sensors rather than one rgbd_camera, because the real
-         device's colour and depth paths differ in both FOV and resolution and
-         gz-sim's rgbd_camera forces a single value for both:
-           colour  IMX214,        HFOV 69 deg
-           depth   OV7251 stereo, HFOV 73 deg, 75 mm baseline
-         The OAK-D Lite carries its own BMI270 6-axis IMU, modelled below. That
+         Modelled as TWO sensors rather than one rgbd_camera. They now carry
+         identical resolution and FOV, because depthai publishes depth aligned
+         into the colour camera's intrinsics, so the historical reason - colour
+         and depth differing, and gz-sim's rgbd_camera forcing one value for
+         both - no longer applies. They stay separate anyway: the streams have
+         their own update rates, clip ranges and noise, and rgbd_camera would
+         also rename the topics away from the /oak/rgb and /oak/stereo pair the
+         real driver publishes.
+           colour  IMX214,        1280x720, HFOV 69.85 deg (measured)
+           depth   OV7251 stereo, 75 mm baseline, republished at colour size,
+                   ROBOTICS preset, clamped to 0-10 m
+         The OAK-D Lite carries its own BMI270 6-axis IMU, on oak_imu_frame
+         below - confirmed present on the real device, which is worth saying
+         because this model is commonly listed as the variant without one. That
          makes two IMUs on this robot: the chassis one on base_imu_link and the
-         camera's, which are separate hardware and separate topics. -->
+         camera's, which are separate hardware, separate topics and, note,
+         separate axis conventions. -->
     <link name='oak_d_lite_link'>
       <pose relative_to='base_footprint'>0.06577 0 0.101953 0 0 0</pose>
       <inertial>
@@ -478,12 +487,29 @@
         </geometry>
       </collision>
 
-      <!-- Colour: IMX214, 1052x780 = exactly 4208/4 x 3120/4.
-           Scaling by a whole fraction preserves the sensor's native 1.3487 aspect,
-           which is what makes the datasheet FOV triple come out exactly right:
-           69.0 HFOV -> 54.0 VFOV, 81.1 DFOV (datasheet 69 / 54 / 81). Note the
-           native frame is NOT 4:3 - forcing 4:3 would give VFOV 54.5 instead.
-           On real hardware this is depthai's i_isp_num=1 / i_isp_den=4.
+      <!-- Colour: IMX214 at 1080P ISP-scaled by 2/3, giving 1280x720.
+
+           This was 1052x780 (the full sensor ISP-scaled by 1/4) to preserve the
+           native 1.3487 aspect and the full 69/54 degree field. The real device
+           REJECTS that: depth-to-colour alignment needs both output dimensions
+           to be multiples of 16, and no ISP fraction of 4208x3120 can be one -
+           4208 = 16*263 and 3120 = 16*195, so num/den lands on a multiple of 16
+           only when den divides num. The driver says so out loud:
+             ISP scaling with num: 1 and den: 4 results in width: 1052 and
+             height: 780 which are not divisible by 16.
+           1920x1080 scaled by 2/3 is what the device actually delivers with
+           aligned depth - 1280 and 720 both divide by 16 where 1080 does not -
+           so it is what this model declares. Note the sensor mode is 1080P, not
+           720P: the IMX214 has no 720P mode and asking for one only produces a
+           warning and a fallback to exactly this. einride_mini_truck_bringup/config/oak_d_lite.yaml
+           is the matching hardware configuration.
+
+           horizontal_fov is the MEASURED value from the device's own EEPROM
+           calibration (fx 3013.31 over 4208 px -> 69.848 deg), not the 69.0 deg
+           on the datasheet. 1080P is a full-width, vertically cropped readout, so
+           HFOV is the full-sensor figure and only the vertical field shrinks:
+           gz derives VFOV 42.886 from this HFOV and the 16:9 frame, against
+           42.90 measured on the real camera.
 
            Both streams are declared at 30 Hz, which is the device's own rate at
            these modes. What Gazebo actually delivers depends entirely on the
@@ -497,63 +523,170 @@
         <topic>oak/rgb/image_raw</topic>
         <gz_frame_id>oak_d_lite_link</gz_frame_id>
         <camera name='imx214'>
-          <horizontal_fov>1.20428</horizontal_fov>
-          <image><width>1052</width><height>780</height><format>R8G8B8</format></image>
+          <horizontal_fov>1.219082</horizontal_fov>
+          <image><width>1280</width><height>720</height><format>R8G8B8</format></image>
           <clip><near>0.05</near><far>50</far></clip>
           <noise><type>gaussian</type><mean>0.0</mean><stddev>0.005</stddev></noise>
-          <optical_frame_id>oak_d_lite_link</optical_frame_id>
+          <optical_frame_id>oak_rgb_camera_optical_frame</optical_frame_id>
         </camera>
       </sensor>
 
-      <!-- Depth from the OV7251 stereo pair: 640x480, 73 deg HFOV, 0.2-19 m.
-           Depth is published aligned to the colour centre, matching depthai's
-           default align_depth behaviour, rather than at the right mono camera. -->
+      <!-- Depth from the OV7251 stereo pair on a 75 mm baseline, 0.2-19 m.
+
+           Declared at the COLOUR camera's resolution and field of view, not the
+           mono pair's. That is not a mistake: with depthai's default
+           align_depth, the depth image is resampled into the colour camera's
+           intrinsics before publication, so on the real device /oak/stereo/*
+           comes out 1280x720 with the colour fx/fy/cx/cy and the colour optical
+           frame - verified against the hardware. The previous 640x480 at 73 deg
+           described the raw mono pair, which is never what reaches the topic.
+           (73 deg is also the datasheet figure; the mono cameras' own EEPROM
+           calibration says 70.5 and 70.4 deg. It does not enter here either.)
+
+           Range and noise both follow the ROBOTICS depth preset the hardware
+           config selects (stereo.i_depth_preset in oak_d_lite.yaml).
+
+           far clip is 10 m, not the sensor's 19 m optical limit, because that
+           preset's threshold filter clamps output to 0-10 m. Without it the
+           real camera publishes up to 65.535 m - uint16 saturation - indoors.
+
+           NOISE IS MEASURED, and the constant below is a compromise gz forces.
+           Per-pixel temporal stddev on a static scene, with the exact preset
+           configuration the hardware runs: 13.5 mm at 1-2 m, 33.1 mm at 2-3 m,
+           32.7 mm at 3-4 m. Pooled over that 1-4 m working band the median is
+           31.1 mm, implying k = 3.33 mm/m^2 for stereo error growing as z^2 -
+           two independent runs agreed to 0.4 mm, so this is reproducible.
+
+           gz's depth camera offers only a single constant stddev, so this
+           declares k evaluated at a 3 m reference, about mid-arena: 30 mm. It
+           is therefore right at 3 m, PESSIMISTIC closer in and OPTIMISTIC
+           further out. Anything that cares about depth uncertainty should
+           scale by (z/3)^2 rather than trusting a flat 30 mm.
+
+           Use the MEDIAN, not the mean: the mean over the same band is 69 mm,
+           inflated by a heavy tail at occlusion boundaries and object edges
+           that a Gaussian cannot represent anyway.
+
+           Beyond about 4 m this camera's depth degrades sharply - 150 mm in the
+           4-6 m bin, 633 mm in 6-10 m - so treat 10 m as where numbers stop
+           arriving, not where they stop being usable.
+
+           Two differences simulation cannot close: gz's depth camera emits
+           32FC1 metres where the real driver emits 16UC1 millimetres, and gz
+           returns a value for every pixel where the real camera, with this
+           preset, fills only about 59% - it drops out on untextured surfaces
+           and in the baseline's occlusion band. -->
       <sensor name='oak_stereo' type='depth_camera'>
         <always_on>1</always_on>
         <update_rate>30</update_rate>
         <topic>oak/stereo/image_raw</topic>
         <gz_frame_id>oak_d_lite_link</gz_frame_id>
         <camera name='ov7251_stereo'>
-          <horizontal_fov>1.27409</horizontal_fov>
-          <image><width>640</width><height>480</height><format>R_FLOAT32</format></image>
-          <clip><near>0.2</near><far>19.0</far></clip>
-          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.003</stddev></noise>
-          <optical_frame_id>oak_d_lite_link</optical_frame_id>
+          <horizontal_fov>1.219082</horizontal_fov>
+          <image><width>1280</width><height>720</height><format>R_FLOAT32</format></image>
+          <clip><near>0.2</near><far>10.0</far></clip>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.030</stddev></noise>
+          <optical_frame_id>oak_rgb_camera_optical_frame</optical_frame_id>
         </camera>
-      </sensor>
-
-      <!-- BMI270: the OAK-D Lite's integrated 6-axis IMU (accel + gyro), published
-           by depthai_ros_driver on /oak/imu/data. This is separate hardware from
-           the chassis IMU on base_imu_link - the robot genuinely has two.
-
-           Noise figures are DERIVED, not datasheet sigmas: BMI270 quotes noise
-           densities of ~0.007 deg/s/sqrt(Hz) for the gyro and ~160 ug/sqrt(Hz) for
-           the accelerometer, which at 100 Hz bandwidth give roughly 1.2e-3 rad/s
-           and 1.6e-2 m/s^2. Being a consumer part it is noisier than the figures
-           carried over for the chassis IMU. Rate is set to 100 Hz; the device and
-           driver support considerably more. -->
-      <sensor name='oak_bmi270' type='imu'>
-        <always_on>1</always_on>
-        <update_rate>100</update_rate>
-        <topic>oak/imu/data</topic>
-        <gz_frame_id>oak_d_lite_link</gz_frame_id>
-        <imu>
-          <angular_velocity>
-            <x><noise type='gaussian'><mean>0.0</mean><stddev>1.2e-3</stddev></noise></x>
-            <y><noise type='gaussian'><mean>0.0</mean><stddev>1.2e-3</stddev></noise></y>
-            <z><noise type='gaussian'><mean>0.0</mean><stddev>1.2e-3</stddev></noise></z>
-          </angular_velocity>
-          <linear_acceleration>
-            <x><noise type='gaussian'><mean>0.0</mean><stddev>1.6e-2</stddev></noise></x>
-            <y><noise type='gaussian'><mean>0.0</mean><stddev>1.6e-2</stddev></noise></y>
-            <z><noise type='gaussian'><mean>0.0</mean><stddev>1.6e-2</stddev></noise></z>
-          </linear_acceleration>
-        </imu>
       </sensor>
     </link>
     <joint name='oak_d_lite_link_joint' type='fixed'>
       <parent>base_link</parent>
       <child>oak_d_lite_link</child>
+    </joint>
+
+    <!-- The two frames the depthai driver stamps its messages with. They exist
+         here so that simulation and hardware publish identical frame_ids on
+         identical topics, and so that ONE description owns the TF tree in both
+         modes: hardware.launch.py starts the driver through
+         camera_as_part_of_a_robot.launch.py, which publishes no TF of its own.
+         Booting the driver through the stock camera.launch.py instead would add
+         a second publisher for these same frames.
+
+         Massless in all but name - 1 g with 1e-6 inertia, the same token used by
+         base_footprint and base_imu_link, because gz-sim requires every link to
+         carry an inertia. -->
+    <link name='oak_rgb_camera_optical_frame'>
+      <!-- Optical convention: x right, y down, z along the view axis, which is
+           what camera_info and every point cloud derived from it assume. The
+           body link oak_d_lite_link is x-forward, so these differ by the usual
+           -90 / 0 / -90 and the two must not be confused. The camera SENSORS
+           stay in oak_d_lite_link, because gz points a camera down its link's
+           +x; only the frame_id they report is this one. -->
+      <pose relative_to='oak_d_lite_link'>0 0 0 -1.5707963 0 -1.5707963</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia><ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz></inertia>
+      </inertial>
+    </link>
+    <joint name='oak_rgb_camera_optical_joint' type='fixed'>
+      <parent>oak_d_lite_link</parent>
+      <child>oak_rgb_camera_optical_frame</child>
+    </joint>
+
+    <link name='oak_imu_frame'>
+      <!-- Pose is the device's OWN factory calibration, read back over USB with
+           getImuToCameraExtrinsics(CAM_A): the BMI270 sits 31.7 mm to the left
+           of the colour camera, 2.2 mm up and 7.1 mm behind it, rotated about
+           the optical x axis by 89.3 degrees. In colour-optical terms the IMU
+           axes come out imu_x = right, imu_y = forward, imu_z = up.
+
+           That rotation is the reason this link exists rather than the sensor
+           hanging off oak_d_lite_link: the driver publishes the BMI270's raw
+           axes without rotating them into any ROS convention, so a simulation
+           that reported the same numbers in body axes would disagree with the
+           hardware by 90 degrees. Note this makes /oak/imu/data a DIFFERENT
+           axis convention from the chassis /imu, on hardware and in simulation
+           alike. -->
+      <pose relative_to='oak_rgb_camera_optical_frame'>-0.031688 -0.002237 -0.007087 1.558876 -0.006180 0.012031</pose>
+      <inertial>
+        <mass>0.001</mass>
+        <inertia><ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz></inertia>
+      </inertial>
+
+      <!-- BMI270: the OAK-D Lite's integrated 6-axis IMU (accel + gyro), published
+           by depthai_ros_driver on /oak/imu/data. This is separate hardware from
+           the chassis IMU on base_imu_link - the robot genuinely has two.
+
+           The IMU's presence was CONFIRMED on the real device, which is worth
+           stating because the OAK-D Lite is widely documented as having no IMU:
+           dai::Device::getConnectedIMU() returns "BMI270" (firmware 1.0.0), the
+           device streams accelerometer and gyroscope packets, and the factory
+           EEPROM carries IMU-to-colour-camera extrinsics. See the camera section
+           of the project README.
+
+           Noise figures are MEASURED on this unit, not derived from the datasheet.
+           2002 samples at 100 Hz with the camera at rest gave per-axis stddevs of
+           1.48e-3 / 0.88e-3 / 2.16e-3 rad/s and 3.62e-2 / 1.01e-2 / 2.71e-2 m/s^2;
+           the values below are the RMS across the three axes. They run about 1.3x
+           (gyro) and 1.7x (accel) above the datasheet-derived figures this model
+           used previously, and they are an upper bound on sensor noise because a
+           bench measurement also picks up ambient vibration.
+
+           Rate is 100 Hz. Measured ceiling for the merged accel+gyro stream on
+           this device is ~250 Hz: asking for 400 or 500 still delivers 250. -->
+      <sensor name='oak_bmi270' type='imu'>
+        <always_on>1</always_on>
+        <update_rate>100</update_rate>
+        <topic>oak/imu/data</topic>
+        <gz_frame_id>oak_imu_frame</gz_frame_id>
+        <imu>
+          <angular_velocity>
+            <x><noise type='gaussian'><mean>0.0</mean><stddev>1.594e-3</stddev></noise></x>
+            <y><noise type='gaussian'><mean>0.0</mean><stddev>1.594e-3</stddev></noise></y>
+            <z><noise type='gaussian'><mean>0.0</mean><stddev>1.594e-3</stddev></noise></z>
+          </angular_velocity>
+          <linear_acceleration>
+            <x><noise type='gaussian'><mean>0.0</mean><stddev>2.676e-2</stddev></noise></x>
+            <y><noise type='gaussian'><mean>0.0</mean><stddev>2.676e-2</stddev></noise></y>
+            <z><noise type='gaussian'><mean>0.0</mean><stddev>2.676e-2</stddev></noise></z>
+          </linear_acceleration>
+        </imu>
+      </sensor>
+    </link>
+    <joint name='oak_imu_joint' type='fixed'>
+      <parent>oak_rgb_camera_optical_frame</parent>
+      <child>oak_imu_frame</child>
     </joint>
 
     <link name='base_lidar_link'>
@@ -585,10 +718,33 @@
            Body ~38.6 x 38.6 x 34.8 mm; the inherited 36 x 36 x 35 mm mount mesh is
            reused as close enough.
 
-           450 samples/revolution = 4500 points/s at 10 Hz, giving 0.8 deg angular
-           resolution. Scan rate is nominally 10 Hz on this device (configurable
-           roughly 5-13 Hz); change update_rate and samples together to keep the
-           4500 pts/s relationship if you retune it.
+           Every number below is matched against the real device on /scan - see
+           "Matching the real LiDAR" in the bringup README. The LD19 datasheet
+           gives 4500 pts/s fixed sampling and a 5/10/13 Hz spin rate, so the
+           points per revolution are a consequence of the spin rate rather than a
+           setting: the unit on this bench spins at 9.89 Hz, which is 4500/9.89 =
+           455 points. That is why ldlidar's fixed bin count of 455 lands almost
+           exactly on the native sample count, and why 455 - not the nominal 450 -
+           is what a subscriber actually receives. update_rate and samples move
+           together; keep samples = 4500 / update_rate if you retune the spin.
+
+           The sweep runs 0 -> 2*pi, not -pi -> +pi, because that is what
+           ldlidar_component publishes (it hardcodes angle_min = 0,
+           angle_max = 2*pi). Index 0 is therefore straight ahead, not behind.
+           Getting this wrong does not fail loudly - it rotates every bearing by
+           180 degrees between simulation and the robot.
+
+           gz computes the increment as (max - min)/(samples - 1), which is also
+           what ldlidar does, so 455 over 0..2*pi reproduces its 0.013840 rad
+           increment exactly.
+
+           Range is the datasheet's 0.02-12 m at 70% reflectivity. Note this is
+           NOT ldlidar's shipped default of 0.03-15 m, which overstates the
+           device; einride_mini_truck_bringup/config/ldlidar.yaml overrides it to
+           these same numbers so both modes report the same range_min/range_max.
+
+           stddev 0.015 is the datasheet's 15 mm measurement resolution, which
+           also puts its +/-45 mm ranging accuracy at 3 sigma.
 
            Scan plane is 25 mm above the link origin, i.e. inside the upper half of
            the body. The inherited value was 40 mm, which floated the scan plane
@@ -603,10 +759,10 @@
         <lidar>
           <scan>
             <horizontal>
-              <samples>450</samples>
+              <samples>455</samples>
               <resolution>1</resolution>
-              <min_angle>-3.14159265</min_angle>
-              <max_angle>3.14159265</max_angle>
+              <min_angle>0</min_angle>
+              <max_angle>6.28318531</max_angle>
             </horizontal>
             <vertical>
               <samples>1</samples>

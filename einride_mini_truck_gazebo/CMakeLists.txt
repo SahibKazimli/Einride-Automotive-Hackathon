@@ -8,6 +8,7 @@ project(einride_mini_truck_gazebo)
 # The 'set' directive defines a variable (e.g. 'GZ_PLUGIN_VER').
 # Such variables can be used lateron in the CMakeLists.txt file.
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(einride_mini_truck_description REQUIRED)
 
 # Gazebo is consumed through the ROS 2 Jazzy `gz_*_vendor` packages rather than a
@@ -205,10 +206,38 @@ foreach(assignment IN LISTS PROP_ASSIGNMENTS)
 endforeach()
 
 
+# The simulation-side stand-in for the LD19 driver: gz's gpu_lidar gets the scan
+# geometry right but not the message semantics. Python rather than another gz
+# system plugin because it acts on the ROS side of the bridge, after gz is done.
+ament_python_install_package(${PROJECT_NAME})
+install(
+  PROGRAMS scripts/ld19_scan_model
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+
 # Following directives are used when testing.
 if(BUILD_TESTING)
-  find_package(ament_lint_auto REQUIRED)
-  ament_lint_auto_find_test_dependencies()
+  # Explicitly, not via ament_lint_auto: with flake8 and pep257 now declared as
+  # test dependencies, ament_lint_auto_find_test_dependencies() registers them
+  # under its own test names and collides with the calls below. It was also
+  # running zero checks before they were declared, so nothing is lost by
+  # dropping it - the same trap einride_mini_truck_bringup/CMakeLists.txt
+  # describes.
+  #
+  # Same linter set and the same pep257 ignore list as the other two packages
+  # that ship Python - see einride_mini_truck_bringup/CMakeLists.txt for why the
+  # arguments are spelled out rather than left to ament_lint_auto.
+  find_package(ament_cmake_flake8 REQUIRED)
+  ament_flake8()
+
+  find_package(ament_cmake_pep257 REQUIRED)
+  ament_pep257(--add-ignore D213 D406 D407 D413)
+
+  # Asserts the transform against numbers measured on the real device, so it
+  # needs no Gazebo and no lidar on the USB bus.
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_ld19_scan_model test/test_ld19_scan_model.py)
 endif()
 
 

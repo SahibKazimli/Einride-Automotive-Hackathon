@@ -44,12 +44,21 @@ def generate_launch_description():
         LaunchConfiguration('use_sim_time'), value_type=bool)
     use_rviz = LaunchConfiguration('rviz')
 
-    # robot_state_publisher parses the SDF directly via sdformat_urdf. The same
-    # file describes the simulated and the real robot, so the TF tree, the RViz
-    # RobotModel and every frame name are identical in both modes.
-    sdf_file = os.path.join(pkg_project_description, 'models',
-                            'einride_mini_truck', 'model.sdf')
-    with open(sdf_file, 'r') as infp:
+    # model.urdf, not model.sdf. robot_state_publisher reads either - it loads
+    # sdformat_urdf as a urdf_parser plugin - and the two produce the same TF
+    # tree, because model.urdf is generated from model.sdf by that very
+    # converter at build time. What differs is who else can read the result:
+    # RViz resolves `robot_description` through the same pluggable parser and so
+    # accepts SDF, but Foxglove's 3D panel has its own URDF reader, understands
+    # only <robot>, and given an <sdf> document renders nothing and reports
+    # nothing. Publishing URDF is what makes the robot visible in both.
+    #
+    # model.sdf remains the single description; see einride_mini_truck_description
+    # /tools/sdf_to_urdf.cpp. Gazebo is unaffected either way - it loads the SDF
+    # itself through model://, never through this topic.
+    urdf_file = os.path.join(pkg_project_description, 'models',
+                             'einride_mini_truck', 'model.urdf')
+    with open(urdf_file, 'r') as infp:
         robot_desc = infp.read()
 
     robot_state_publisher = Node(
@@ -63,11 +72,19 @@ def generate_launch_description():
         ]
     )
 
+    # -f overrides the Fixed Frame baked into the .rviz file, which is what keeps
+    # one config serving both modes instead of two that drift apart. It has to be
+    # overridden, because the right frame genuinely differs: the file says odom,
+    # and on hardware there is no odom frame at all until the deferred odometry
+    # phase publishes one. RViz does not report that as an error - every display
+    # that needs a transform to the fixed frame simply queues its messages until
+    # the queue fills, and then logs "Message Filter dropping message" forever.
     rviz = Node(
         package='rviz2',
         executable='rviz2',
         arguments=['-d', os.path.join(pkg_project_bringup, 'config',
-                                      'einride_mini_truck.rviz')],
+                                      'einride_mini_truck.rviz'),
+                   '-f', LaunchConfiguration('fixed_frame')],
         parameters=[{'use_sim_time': use_sim_time}],
         condition=IfCondition(use_rviz)
     )
@@ -82,6 +99,15 @@ def generate_launch_description():
                                           'simulation, false on hardware.'),
         DeclareLaunchArgument('rviz', default_value='true',
                               description='Open RViz.'),
+        # No default, for the same reason use_sim_time has none: the correct
+        # value is a property of the mode, and the failure when it is wrong is
+        # silent. A third entry point gets an error here rather than an RViz
+        # that drops every scan.
+        DeclareLaunchArgument('fixed_frame',
+                              description='RViz fixed frame. odom in '
+                                          'simulation; base_footprint on '
+                                          'hardware, which has no odom frame '
+                                          'until wheel odometry lands.'),
         robot_state_publisher,
         rviz,
     ])

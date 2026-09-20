@@ -15,7 +15,8 @@
   <depend>robot_state_publisher</depend>
   <depend>sdformat_urdf</depend>
   <exec_depend>rviz2</exec_depend>
-  <!-- throttles the physics-rate /joint_states_raw down to /joint_states -->
+  <!-- throttles the physics-rate /joint_states_raw down to /joint_states in
+       simulation, and on hardware relays the lidar's private ~/scan onto /scan -->
   <exec_depend>topic_tools</exec_depend>
   <depend>einride_mini_truck_description</depend>
   <depend>einride_mini_truck_gazebo</depend>
@@ -25,14 +26,45 @@
        exec-only and every one of them can be switched off with a launch
        argument. -->
   <exec_depend>einride_mini_truck_hardware</exec_depend>
-  <!-- ldlidar is not a released ROS package: build it from source, e.g. the
-       copy in ugv_ws/src/ugv_else/ldlidar. rosdep will warn that it cannot
-       resolve this key, which the README's -r flag turns into a warning
-       rather than a failure. -->
-  <exec_depend>ldlidar</exec_depend>
+  <!-- LD19P lidar. Not a released ROS package: build ldrobot-lidar-ros2 from
+       source into the workspace - see "The LiDAR driver" in the README. rosdep
+       will warn that it cannot resolve this key, which the README's -r flag
+       turns into a warning rather than a failure.
+
+       ldlidar_component, not the ldlidar metapackage: the component library is
+       what actually holds the node, and it is all hardware.launch.py loads. The
+       metapackage carries no launch files and no code, so depending on it would
+       have named something that cannot fail to be missing. -->
+  <exec_depend>ldlidar_component</exec_depend>
+  <!-- ldlidar_component is a composable node with no standalone executable, so
+       it needs a container to live in. -->
+  <exec_depend>rclcpp_components</exec_depend>
+  <!-- and it is a lifecycle node, so something has to configure and activate it
+       or it never opens the serial port. -->
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
+  <!-- OAK-D Lite. This key resolves to ros-jazzy-depthai-ros-driver, the v2
+       driver, and it must stay that way: the v3 package
+       (ros-jazzy-depthai-ros-driver-v3) crashes this camera's firmware the
+       moment either mono sensor starts. See "Which depthai stack" in the
+       README. The two install side by side, so v3 being present is fine. -->
   <exec_depend>depthai_ros_driver</exec_depend>
-  <!-- derives /scan/points from /scan, which the LD19 driver does not publish -->
+  <!-- derives /scan/points from /scan in both modes: neither the LD19 driver nor
+       ld19_scan_model emits a cloud, and building it the same way on both sides
+       is what keeps the topic identical. -->
   <exec_depend>pointcloud_to_laserscan</exec_depend>
+  <!-- WebSocket bridge for the Foxglove app. Not started by any launch file
+       here: it runs as its own systemd service, einride-mini-truck-foxglove,
+       whose unit lives in this package's systemd/ directory. Declared here so
+       that rosdep installs it on the robot along with everything else, and so
+       that it is available in simulation too. -->
+  <exec_depend>foxglove_bridge</exec_depend>
+  <!-- `ros2 launch` itself. Obvious on a development machine, where a desktop
+       install has always dragged it in, and not obvious at all on a robot: a
+       minimal ROS install can have /opt/ros/<distro>/setup.bash and the whole
+       runtime without the CLI, and then the service dies with
+       "invalid choice: 'launch'" and nothing that points at a missing package.
+       Both systemd units start their nodes through it. -->
+  <exec_depend>ros2launch</exec_depend>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

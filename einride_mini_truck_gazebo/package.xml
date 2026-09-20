@@ -21,9 +21,17 @@
   <depend>gz_common_vendor</depend>
   <depend>gz_sim_vendor</depend>
 
-  <buildtool_depend>ament_cmake</buildtool_depend>
+  <!-- ld19_scan_model, the simulation-side stand-in for the LD19 driver. -->
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
 
-  <test_depend>ament_lint_auto</test_depend>
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <test_depend>ament_cmake_flake8</test_depend>
+  <test_depend>ament_cmake_pep257</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

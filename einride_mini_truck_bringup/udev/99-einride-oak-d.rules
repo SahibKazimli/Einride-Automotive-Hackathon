@@ -1,0 +1,11 @@
+# OAK-D Lite. The camera enumerates as a raw USB device rather than a video
+# node, so the depthai driver opens it through libusb and the default 0600 root
+# ownership is what stops it - `lsusb` shows the device and the driver reports
+# finding none. 03e7 is Movidius, the Myriad X inside the camera.
+#
+# Matches the rule documented in "Running on real hardware" in the README, and
+# the one the depthai installer writes. 0666 rather than a group is what the
+# vendor specifies: the device re-enumerates with a different product ID as it
+# boots its firmware, so a rule narrow enough to carry a group reliably would
+# have to match both identities.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="03e7", MODE="0666"

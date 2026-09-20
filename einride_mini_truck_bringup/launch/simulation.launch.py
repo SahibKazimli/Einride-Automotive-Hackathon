@@ -15,8 +15,13 @@
 """Run the robot in Gazebo. The hardware counterpart is hardware.launch.py.
 
 This file owns only what is specific to simulation - the Gazebo server, the
-ros_gz bridge, and the joint-state throttle. Everything shared with hardware
-lives in common.launch.py.
+ros_gz bridge, the joint-state throttle, and ld19_scan_model, which finishes the
+bridged scan into what the LD19 driver would have published. Everything shared
+with hardware lives in common.launch.py.
+
+scan_to_points is the one node that is not simulation-specific: hardware.launch.py
+runs the same converter on the same topic, because /scan/points has to be built
+the same way in both modes to be the same topic.
 """
 
 import os
@@ -30,6 +35,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -40,6 +46,7 @@ def generate_launch_description():
     headless = LaunchConfiguration('headless')
     use_rviz = LaunchConfiguration('rviz')
     joint_state_rate = LaunchConfiguration('joint_state_rate')
+    scan_intensity = LaunchConfiguration('scan_intensity')
 
     # Project GUI config: frames the camera on the robot rather than gz-sim's
     # 6 m default standoff. It must be a full copy of the default config, because
@@ -85,6 +92,38 @@ def generate_launch_description():
         output='both',
     )
 
+    # gz's gpu_lidar produces the LD19's scan geometry (455 bins over 0..2*pi,
+    # 0.02-12 m - see the sensor block in model.sdf) but not the LD19 driver's
+    # message semantics. This node supplies the rest: NaN rather than +inf for a
+    # bin that returned nothing, a measured scan_time and time_increment, and a
+    # finite intensity on the bins that did return. The bridge hands it
+    # /scan/raw and it publishes the /scan everything else subscribes to.
+    ld19_scan_model = Node(
+        package='einride_mini_truck_gazebo',
+        executable='ld19_scan_model',
+        name='ld19_scan_model',
+        # Without value_type the substitution arrives as a string and the node
+        # rejects it: it declared 'intensity' as a double.
+        parameters=[{
+            'use_sim_time': True,
+            'intensity': ParameterValue(scan_intensity, value_type=float),
+        }],
+        output='both',
+    )
+
+    # The same converter hardware.launch.py runs, on the same input, so
+    # /scan/points is produced identically in both modes rather than being gz's
+    # separate ray-cast cloud. It has to come after ld19_scan_model, not off
+    # /scan/raw, or the cloud would still carry the +inf bins.
+    scan_to_points = Node(
+        package='pointcloud_to_laserscan',
+        executable='laserscan_to_pointcloud_node',
+        name='scan_to_points',
+        remappings=[('scan_in', '/scan'), ('cloud', '/scan/points')],
+        parameters=[{'use_sim_time': True}],
+        output='both',
+    )
+
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -103,6 +142,9 @@ def generate_launch_description():
         launch_arguments={
             'use_sim_time': 'true',
             'rviz': use_rviz,
+            # gz's DiffDrive publishes odom -> base_footprint, so the world can
+            # stay still and the robot drive through it.
+            'fixed_frame': 'odom',
         }.items(),
     )
 
@@ -115,8 +157,16 @@ def generate_launch_description():
                               description='Open RViz.'),
         DeclareLaunchArgument('joint_state_rate', default_value='50',
                               description='Hz to throttle /joint_states_raw down to.'),
+        DeclareLaunchArgument(
+            'scan_intensity', default_value='200.0',
+            description=('Intensity for a /scan bin that returned something. '
+                         'Gazebo does not model return strength, so this is a '
+                         "placeholder inside the real device's observed 7-255; "
+                         '0.0 restores raw Gazebo behaviour.')),
         gz_sim,
         bridge,
+        ld19_scan_model,
+        scan_to_points,
         joint_state_throttle,
         common,
     ])

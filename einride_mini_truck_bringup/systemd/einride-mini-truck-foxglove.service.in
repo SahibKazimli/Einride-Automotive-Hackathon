@@ -1,0 +1,79 @@
+# Copyright 2025 Einride AB
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Runs foxglove_bridge on the robot: a WebSocket server that the Foxglove app
+# connects to directly over the local network, at ws://<robot>:8765.
+#
+# Nothing here talks to Foxglove's servers. The bridge only listens; the app
+# makes the connection inward, so the robot needs no outbound access and no
+# account, and there is no remote-access agent involved.
+#
+# This is a template. Every at-sign placeholder is filled in by deploy.sh, which
+# is also what installs the result. The installed copy under
+# /etc/systemd/system is a build product: edit this file and redeploy.
+#
+# Its settings live in /etc/default/@SERVICE_NAME@ - the same file the main
+# service reads. One file rather than two, because the two units have to agree
+# about ROS_DOMAIN_ID and RMW_IMPLEMENTATION or the bridge sees an empty graph,
+# and a second copy of those is a second chance to get them different.
+
+[Unit]
+Description=Foxglove bridge for the Einride mini truck (WebSocket, port from FOXGLOVE_PORT)
+
+# DDS discovery binds to a real interface at startup, and this one also binds a
+# listening socket.
+After=network-online.target
+Wants=network-online.target
+
+# Ordered after the stack but not bound to it. Deliberately independent: the
+# bridge is the window you watch the robot through, and it is most useful when
+# the stack is misbehaving - so restarting or stopping einride-mini-truck must
+# not take your Foxglove connection down with it. It serves an empty graph while
+# nothing is running, which is the honest thing to show.
+After=@SERVICE_NAME@.service
+
+StartLimitIntervalSec=120
+StartLimitBurst=10
+
+[Service]
+Type=exec
+User=@RUN_USER@
+WorkingDirectory=@WORKSPACE@
+EnvironmentFile=-/etc/default/@SERVICE_NAME@
+Environment=PYTHONUNBUFFERED=1
+Environment=RCUTILS_COLORIZED_OUTPUT=0
+
+ExecStart=/usr/local/lib/@SERVICE_NAME@/run-foxglove.sh
+
+Restart=on-failure
+RestartSec=5
+
+# SIGINT for the same reason the main unit uses it: ros2 launch shuts its nodes
+# down in order on SIGINT and less carefully on SIGTERM. Nothing here drives the
+# robot, so the stakes are lower, but there is no reason for the two units to
+# stop differently.
+KillSignal=SIGINT
+KillMode=mixed
+TimeoutStopSec=15
+
+SyslogIdentifier=@SERVICE_NAME@-foxglove
+
+# Same single knob as the main unit, and the same reasons for its neighbours
+# being absent - see einride-mini-truck.service.in. This one needs no device
+# access at all, but it does need the same /tmp and /dev/shm as every other DDS
+# participant on the robot, which is what rules PrivateTmp out.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

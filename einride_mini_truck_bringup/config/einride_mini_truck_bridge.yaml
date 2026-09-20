@@ -69,17 +69,23 @@
   qos_profile: SENSOR_DATA
 
 # --- 2D lidar ----------------------------------------------------------------
-- ros_topic_name: "/scan"
+# Bridged to /scan/raw, not /scan: gz's gpu_lidar gets the scan geometry right
+# but not the message semantics the LD19 driver produces (+inf instead of NaN
+# for a bin that returned nothing, scan_time and time_increment left at zero,
+# intensities flat zero). ld19_scan_model sits on this topic and publishes the
+# /scan that everything else consumes. See that node's docstring.
+- ros_topic_name: "/scan/raw"
   gz_topic_name: "/scan"
   ros_type_name: "sensor_msgs/msg/LaserScan"
   gz_type_name: "gz.msgs.LaserScan"
   direction: GZ_TO_ROS
 
-- ros_topic_name: "/scan/points"
-  gz_topic_name: "/scan/points"
-  ros_type_name: "sensor_msgs/msg/PointCloud2"
-  gz_type_name: "gz.msgs.PointCloudPacked"
-  direction: GZ_TO_ROS
+# gz's own /scan/points is deliberately NOT bridged. On hardware /scan/points is
+# laserscan_to_pointcloud's view of /scan, and gz's cloud is a different thing
+# built straight off the ray cast - a different field layout, and derived from
+# the pre-ld19_scan_model ranges, so the two modes disagreed on both content and
+# structure. simulation.launch.py now runs the same converter hardware does, off
+# the same /scan, which makes the topic identical on both sides by construction.
 
 # --- OAK-D Lite (forward-facing) ------------------------------------------------
 # Topic layout follows depthai_ros_driver: /oak/rgb/*, /oak/stereo/*, /oak/points.

@@ -18,9 +18,17 @@ This file owns only what is specific to hardware - the three device drivers.
 Everything shared with simulation lives in common.launch.py, which is included
 with use_sim_time false because there is no /clock on a real robot.
 
-Not started here, and deliberately: the EKF and the joint-state throttle. Both
-need topics that only the deferred odometry phase will provide, so starting them
-now would give a filter with no input rather than an honest gap.
+scan_to_points is the exception: it is not hardware-specific, and
+simulation.launch.py starts the same node on the same topic. /scan/points has to
+be built the same way in both modes to be the same topic.
+
+Not started here, and deliberately: the EKF. It needs /odom, which only the
+deferred odometry phase will provide, so starting it now would give a filter
+with no input rather than an honest gap.
+
+joint_state_relay is started here, not deferred with the EKF: it only carries
+the two wheels ugv02_serial_node actually instruments, so it is a partial fix
+rather than nothing - see the node's own comment below.
 """
 
 import os
@@ -34,7 +42,8 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
-from launch_ros.actions import Node
+from launch_ros.actions import ComposableNodeContainer, Node
+from launch_ros.descriptions import ComposableNode
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -63,20 +72,119 @@ def generate_launch_description():
         output='both',
     )
 
-    # LD19P 360-degree lidar. The stock ld19.launch.py already publishes on
-    # /scan with frame_id base_lidar_link, which is exactly what the simulation
-    # bridge publishes, so it is included unmodified.
-    lidar = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([FindPackageShare('ldlidar'), 'launch', 'ld19.launch.py'])),
+    # LD19P 360-degree lidar, driven by ldlidar_component from
+    # github.com/Myzhar/ldrobot-lidar-ros2.
+    #
+    # The component is loaded into a container here rather than through that
+    # package's own ldlidar_bringup.launch.py, which cannot be used as-is for
+    # two independent reasons:
+    #
+    #  * it starts a second robot_state_publisher, with the bare lidar's own
+    #    URDF, on /robot_description and /tf. common.launch.py already publishes
+    #    the whole robot on those topics, so the two would fight over the frames
+    #    and the TF tree would flicker between them. Exactly the collision the
+    #    camera comment below describes, and avoided the same way: take the node,
+    #    not the launch file.
+    #  * it hardcodes its own params/ldlidar.yaml, so the port, the frame and the
+    #    range could not be set. config/ldlidar.yaml explains what has to change
+    #    and why.
+    #
+    # ldlidar_component ships no standalone executable - the whole repo's only
+    # main() functions belong to the vendor SDK's demo programs - so a container
+    # is not a design choice here, it is the only way to run the node at all.
+    #
+    # Container and component are declared together rather than as a Node plus a
+    # LoadComposableNodes, which would have to name its target as the literal
+    # string '/ldlidar_container'. A rename or an added namespace does not make
+    # that lookup fail loudly; it makes it wait. One silent failure mode around
+    # this driver is enough - see the remap note below.
+    #
+    # use_intra_process_comms buys nothing while this is the only component in
+    # the container, since intra-process only short-circuits nodes sharing a
+    # process. It is here so that a second one - the camera also ships composable
+    # nodes - gets zero-copy by joining the list, rather than needing this block
+    # restructured first.
+    lidar = ComposableNodeContainer(
+        name='ldlidar_container',
+        namespace='',
+        package='rclcpp_components',
+        executable='component_container_isolated',
+        # The container is a node in its own right, so it needs this as much as
+        # anything else here - the component's own copy below does not cover it.
+        # False is already the ROS default, so this only bites when something
+        # sets use_sim_time globally with a /**: wildcard, which is exactly the
+        # case the explicit value exists to survive.
+        parameters=[{'use_sim_time': False}],
         condition=IfCondition(use_lidar),
+        output='both',
+        composable_node_descriptions=[
+            ComposableNode(
+                package='ldlidar_component',
+                plugin='ldlidar::LdLidarComponent',
+                name='ldlidar_node',
+                parameters=[
+                    LaunchConfiguration('lidar_params'),
+                    {'use_sim_time': False},
+                ],
+                # Deliberately NOT remapped to /scan, however much it looks
+                # like it should be. The component publishes on the private
+                # topic ~/scan, and its read loop gates on
+                # count_subscribers("~/scan") - the unresolved string - so it
+                # only talks to the device while something is subscribed. A
+                # publisher remap does not move that check: remap ~/scan to
+                # /scan and the publisher appears on /scan while the gate keeps
+                # watching /ldlidar_node/scan, which now has no publisher and so
+                # never has a subscriber. The node then reports 'active',
+                # advertises /scan, logs nothing at all, and never reads the
+                # lidar. Verified on the device: /scan was silent until a
+                # subscriber was attached to /ldlidar_node/scan, at which point
+                # it immediately ran at 9.89 Hz. scan_relay below is what
+                # bridges the two names instead.
+                extra_arguments=[{'use_intra_process_comms': True}],
+            ),
+        ],
     )
 
-    # Simulation also publishes /scan/points, because gz's lidar sensor emits a
-    # cloud alongside the scan. The LD19 driver has no equivalent, so derive one
-    # from the scan to keep the contract whole. It is the same data either way -
-    # a 2D scan lifted into the lidar frame - so nothing downstream can tell the
-    # two modes apart.
+    # ldlidar_component is a lifecycle node: on its own it reaches 'unconfigured'
+    # and stops there, having opened no serial port and advertised no /scan. It
+    # does not fail, it simply sits - which looks exactly like a dead lidar. The
+    # manager walks it through configure and activate, and the bond it keeps
+    # afterwards means a driver that dies is noticed rather than silently absent.
+    lidar_lifecycle_manager = Node(
+        package='nav2_lifecycle_manager',
+        executable='lifecycle_manager',
+        name='lidar_lifecycle_manager',
+        parameters=[{
+            'use_sim_time': False,
+            'autostart': True,
+            'node_names': ['ldlidar_node'],
+        }],
+        condition=IfCondition(use_lidar),
+        output='both',
+    )
+
+    # Moves the driver's private ~/scan onto /scan, which is the name simulation
+    # publishes and every consumer in this project subscribes. Its subscription
+    # is also what keeps the driver's lazy read loop running - see the comment
+    # above - so this node is load-bearing twice over and is not an optional
+    # convenience. Not lazy itself: topic_tools relay defaults to lazy:=false and
+    # must stay that way, or the two lazy gates wait on each other and nothing
+    # ever starts.
+    scan_relay = Node(
+        package='topic_tools',
+        executable='relay',
+        name='scan_relay',
+        arguments=['/ldlidar_node/scan', '/scan'],
+        parameters=[{'use_sim_time': False}],
+        condition=IfCondition(use_lidar),
+        output='both',
+    )
+
+    # /scan/points, derived from /scan by the same converter simulation runs on
+    # the same topic - see simulation.launch.py. Neither the LD19 driver nor
+    # anything else here emits a cloud of its own, and building it the same way
+    # in both modes is what makes it the same topic rather than two topics that
+    # share a name.
     scan_to_points = Node(
         package='pointcloud_to_laserscan',
         executable='laserscan_to_pointcloud_node',
@@ -90,21 +198,60 @@ def generate_launch_description():
     # OAK-D Lite. The resolution parameters in oak_d_lite.yaml are what make the
     # real camera's field of view match the simulated one - see "Matching the
     # real camera" in the README.
+    #
+    # camera_as_part_of_a_robot.launch.py, not camera.launch.py: the former
+    # publishes no TF and no camera URDF, which is what a camera bolted to a
+    # robot that already has a description needs. camera.launch.py brings its own
+    # robot_state_publisher and its own oak_* frames, which would collide with
+    # the ones model.sdf already declares - two publishers, one frame, and a TF
+    # tree that flickers between them. Frame names are unaffected: the driver
+    # still stamps images oak_rgb_camera_optical_frame and IMU messages
+    # oak_imu_frame, and model.sdf declares exactly those, so simulation and
+    # hardware carry identical frame_ids on identical topics.
     camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
-                FindPackageShare('depthai_ros_driver'), 'launch', 'camera.launch.py'])),
+                FindPackageShare('depthai_ros_driver'), 'launch',
+                'camera_as_part_of_a_robot.launch.py'])),
         launch_arguments={
             'name': 'oak',
-            # Attach the driver's internal frames under the link the model
-            # declares, so the camera tree hangs off the robot rather than
-            # floating in its own root.
-            'parent_frame': 'oak_d_lite_link',
             'params_file': os.path.join(
                 pkg_project_bringup, 'config', 'oak_d_lite.yaml'),
-            'use_rviz': 'False',
+            'rectify_rgb': 'False',
         }.items(),
         condition=IfCondition(use_camera),
+    )
+
+    # robot_state_publisher never broadcasts TF for a joint it has no JointState
+    # for, and ugv02_serial_node publishes the two encoded wheels on
+    # /wheel_encoders, not /joint_states - so without this, every one of the six
+    # wheel frames sits at its zero-pose URDF default (Foxglove reports this as
+    # "the default URDF transform will be used"; RViz shows the same thing but
+    # without a warning). Relaying, not renaming the publisher: simulation keeps
+    # its own /wheel_encoders too (see einride_mini_truck_bridge.yaml), and
+    # renaming here would make the two modes diverge for no reason.
+    #
+    # Only the front axle moves - the other four wheels have no encoder and
+    # hold their last/zero position - but a partial fix beats the current
+    # all-six-wrong state. This goes away, not just moves, once the deferred
+    # odometry phase gives every wheel joint (see model.sdf's comment on why TF
+    # needs all six) a real publisher.
+    #
+    # Reliability is forced to reliable: /wheel_encoders is sensor-data QoS
+    # (best effort), but robot_state_publisher's joint_states subscription is
+    # plain QoS(10) (reliable, volatile). A best-effort publisher cannot connect
+    # to a reliable subscriber, so without this override the relay would run
+    # and log nothing wrong while carrying the encoder data nowhere.
+    joint_state_relay = Node(
+        package='topic_tools',
+        executable='relay',
+        name='joint_state_relay',
+        arguments=['/wheel_encoders', '/joint_states'],
+        parameters=[{
+            'use_sim_time': False,
+            'qos_overrides./joint_states.publisher.reliability': 'reliable',
+        }],
+        output='both',
     )
 
     common = IncludeLaunchDescription(
@@ -115,6 +262,13 @@ def generate_launch_description():
             # here waits at time zero forever and looks like a hang.
             'use_sim_time': 'false',
             'rviz': use_rviz,
+            # Not odom: nothing publishes that frame on hardware until the
+            # deferred wheel-odometry phase does, so RViz would have no
+            # transform for any sensor and would drop every message it was
+            # given. base_footprint is the root of what robot_state_publisher
+            # actually puts on /tf_static here. Change this to odom in the same
+            # commit that starts publishing it.
+            'fixed_frame': 'base_footprint',
         }.items(),
     )
 
@@ -126,6 +280,11 @@ def generate_launch_description():
             'lidar', default_value='true',
             description='Start the LD19P driver and its /scan/points converter.'),
         DeclareLaunchArgument(
+            'lidar_params',
+            default_value=PathJoinSubstitution(
+                [pkg_project_bringup, 'config', 'ldlidar.yaml']),
+            description='Parameter file for ldlidar_node.'),
+        DeclareLaunchArgument(
             'camera', default_value='true',
             description='Start the OAK-D Lite driver.'),
         DeclareLaunchArgument(
@@ -135,7 +294,10 @@ def generate_launch_description():
             description='Parameter file for ugv02_serial_node.'),
         ugv02_serial,
         lidar,
+        lidar_lifecycle_manager,
+        scan_relay,
         scan_to_points,
         camera,
+        joint_state_relay,
         common,
     ])

@@ -1,0 +1,12 @@
+# LD19P lidar: a CP210x USB-serial bridge, which enumerates as an arbitrary
+# ttyUSB* depending on what else was plugged in first. config/ldlidar.yaml names
+# the port as /dev/ldlidar, so this rule is what makes that name exist.
+#
+# Adapted from rules/ldlidar.rules in github.com/Myzhar/ldrobot-lidar-ros2, with
+# one deliberate change: the vendor rule sets MODE 0777 on the device node,
+# which is world-writable for no reason anyone has justified. A serial port's
+# conventional owner on Debian and Ubuntu is the dialout group, the service user
+# is in it already for the chassis UART, so 0660 with that group gives exactly
+# the same access to the people who should have it.
+KERNEL=="ttyUSB*", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", \
+    MODE:="0660", GROUP:="dialout", SYMLINK+="ldlidar"

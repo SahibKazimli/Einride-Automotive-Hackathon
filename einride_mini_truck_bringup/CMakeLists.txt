@@ -20,6 +20,49 @@ install(
   DESTINATION share/${PROJECT_NAME}/config
 )
 
+# The systemd service that runs hardware.launch.py on the robot, and the scripts
+# that install it there over ssh. Shipped into the install space so the service
+# can be reinstalled or removed from a machine that has the workspace but not the
+# source repo - the scripts find their templates relative to themselves, so an
+# installed copy resolves them the same way a source one does.
+#
+# Only the parts that need no sources work from there, which is most of what
+# matters on a robot: provision.sh --uninstall, and --no-build against a prepared
+# artifacts directory. A cross-build needs the whole workspace src/ as its
+# context, and deploy.sh needs a workspace to build in, so both of those want the
+# source checkout.
+#
+# PROGRAMS, not FILES: both are executable, and install(FILES) drops the mode.
+install(
+  PROGRAMS
+    systemd/run-hardware.sh
+    systemd/run-foxglove.sh
+  DESTINATION share/${PROJECT_NAME}/systemd
+)
+install(
+  FILES
+    systemd/einride-mini-truck.service.in
+    systemd/einride-mini-truck-foxglove.service.in
+    systemd/einride-mini-truck.env.in
+  DESTINATION share/${PROJECT_NAME}/systemd
+)
+install(
+  PROGRAMS
+    tools/provision.sh
+    tools/deploy.sh
+  DESTINATION share/${PROJECT_NAME}/tools
+)
+# Sourced by the two scripts above, not run, so FILES rather than PROGRAMS.
+install(
+  FILES
+    tools/_common.sh
+  DESTINATION share/${PROJECT_NAME}/tools
+)
+install(
+  DIRECTORY
+    udev/
+  DESTINATION share/${PROJECT_NAME}/udev
+)
 if(BUILD_TESTING)
   # The linters are invoked explicitly rather than through ament_lint_auto,
   # which only ever calls them with their defaults. pep257 needs arguments: the
@@ -45,6 +88,15 @@ if(BUILD_TESTING)
   ament_add_pytest_test(test_interface_conformance
     test/test_interface_conformance.py
     TIMEOUT 400
+  )
+
+  # Asserts /scan against a real LD19: bin count, sweep direction, range limits,
+  # NaN-not-inf, and above all that any message arrives at all. Skips itself when
+  # no lidar is attached, so it is safe to run anywhere; on the robot it is the
+  # only thing that catches the driver going active and publishing nothing.
+  ament_add_pytest_test(test_lidar_scan_contract
+    test/test_lidar_scan_contract.py
+    TIMEOUT 200
   )
 endif()
 

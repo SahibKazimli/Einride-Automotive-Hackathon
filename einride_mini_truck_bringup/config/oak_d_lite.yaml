@@ -2,30 +2,125 @@
 # depthai_ros_driver parameters for the OAK-D Lite, set so the real camera
 # matches the simulated one. Used by hardware.launch.py.
 #
-# The colour stream is the sensor's native 4208x3120 ISP-scaled by 1/4, giving
-# 1052x780. That frame is not 4:3 - it is 1.3487 - and preserving that aspect is
-# what reproduces the datasheet's 69/54/81 degree field of view. Forcing a true
-# 4:3 gives VFOV 54.5; any 16:9 mode such as 1080p or 720p drops VFOV to 42.3,
-# losing about 12 degrees of vertical field. See "Matching the real camera" in
-# the project README.
+# Every value here was verified against the physical camera; see "Matching the
+# real camera" in the project README for the measurements.
+#
+# WHY 1280x720 AND NOT 1052x780
+# -----------------------------
+# An earlier version of this file asked for the sensor's native 4208x3120
+# ISP-scaled by 1/4, giving 1052x780, to preserve the native 1.3487 aspect and
+# so the full 69/54 degree field of view. The real device rejects it:
+#
+#   ISP scaling with num: 1 and den: 4 results in width: 1052 and height: 780
+#   which are not divisible by 16.
+#   StereoDepth: Custom disparity/depth width must be multiple of 16.
+#
+# Depth-to-colour alignment requires both output dimensions to be multiples of
+# 16, and no ISP fraction of the full sensor can satisfy that: 4208 = 16*263 and
+# 3120 = 16*195, so a scale of num/den only lands on a multiple of 16 when den
+# divides num, i.e. never for a downscale. 13MP is therefore usable only at full
+# resolution, which is far beyond the USB budget.
+#
+# What works instead is the 1080P sensor mode ISP-scaled by 2/3: 1920x1080 ->
+# 1280x720, and 1280 and 720 both divide by 16 where 1080 does not. 1080P is a
+# full-width, vertically cropped readout, so measured HFOV is 69.85 deg -
+# identical to the full sensor - and only the vertical field is reduced, from
+# 54.76 to 42.90 deg. On this robot the camera sits 0.10 m up looking level, so
+# that costs about 6 cm of near-ground visibility (first ground return moves from
+# 0.20 m to 0.26 m ahead) and nothing else. That is the price of aligned depth,
+# and it is worth paying: colour and depth then share one optical frame, one
+# resolution and one set of intrinsics, which is what model.sdf assumes.
 /oak:
   ros__parameters:
     camera:
-      # Simulation publishes /oak/imu/data from the BMI270, so hardware must
-      # too. The reference config had this off. It is the quieter of the two
-      # gyros and the better heading source, so it is not optional here.
+      # Confirmed present on the real device despite the OAK-D Lite commonly
+      # being documented as having no IMU: getConnectedIMU() reports BMI270 and
+      # the device streams accel + gyro. Simulation publishes /oak/imu/data, so
+      # hardware must too.
+      #
+      # Set under BOTH namespaces deliberately. depthai_ros_driver 2.12.2 builds
+      # from 2026-09-11 onward dropped camera.i_enable_imu and read
+      # pipeline_gen.i_enable_imu instead; earlier builds of the same version
+      # number have camera.i_enable_imu as the live key. The robot and this
+      # workstation are on opposite sides of that change. An unknown parameter
+      # in a params file is ignored rather than rejected, so naming both is
+      # safe and works on either build. On the newer build the camera. key is a
+      # silent no-op and the IMU runs only because pipeline_gen defaults to
+      # true, so this is insurance against that default changing.
       i_enable_imu: true
+      # The OAK-D Lite has no IR dot projector and no floodlight. Leaving the
+      # driver default of true asks a device with no such hardware to drive it.
       i_enable_ir: false
       i_nn_type: none
+    pipeline_gen:
+      i_enable_imu: true          # see camera.i_enable_imu above
     rgb:
-      i_resolution: 13MP          # 4208x3120 native
-      i_set_isp_scale: true
-      i_isp_num: 1
-      i_isp_den: 4                # -> 1052x780, matching model.sdf
+      # 1080P, not 720P. The IMX214 does not support a 720P sensor mode - asking
+      # for one logs
+      #   Resolution 720P not supported by sensor IMX214. Using default
+      #   resolution 1080P
+      # on every boot and then falls back here anyway. The output was always
+      # correct, because i_width/i_height below ISP-scale 1920x1080 down by 2/3,
+      # but a config that only works via a fallback path is a config that lies
+      # about what the sensor is doing. Naming the real mode makes the warning
+      # go away and changes nothing else: verified on the robot, byte-identical
+      # camera_info (1280x720, fx 916.60, HFOV 69.85, VFOV 42.90).
+      #
+      # 1080P is also the only sensor mode that survives the multiple-of-16 rule
+      # depth alignment imposes: 1920x1080 scaled 2/3 gives 1280x720, and both
+      # 1280 and 720 divide by 16. 1080 itself does not, which is why the ISP
+      # scale rather than the raw sensor mode is what reaches the topic.
+      i_resolution: 1080P
+      # Must be stated explicitly. The driver derives camera_info from
+      # i_width/i_height, so leaving them at a value the sensor does not
+      # actually produce yields a camera_info that does not match the image.
+      i_width: 1280
+      i_height: 720
       i_fps: 30.0
     stereo:
-      i_resolution: 480P          # 640x480, matching model.sdf
+      i_resolution: 480P          # 640x480 OV7251 pair, 75 mm baseline
+      # Depth is aligned to the colour camera, so the published depth image is
+      # colour-sized and carries the colour intrinsics. These must therefore
+      # match the rgb block above, not the 640x480 the mono pair produces.
+      i_align_depth: true
+      i_width: 1280
+      i_height: 720
       i_fps: 30.0
-      # Depth is colour-aligned by default, which is what the model assumes:
-      # colour and depth share one optical frame.
       i_subpixel: true
+      # Luxonis' own preset for "navigation and obstacle detection, without
+      # motion blur". Without it the driver runs HIGH_ACCURACY, whose threshold
+      # filter has maxRange 65535 mm and whose spatial, speckle and temporal
+      # filters are all off - which on this camera publishes depth up to
+      # 65.535 m indoors (uint16 saturation), 1 pixel in 1000 claiming beyond
+      # 50 m on a sensor whose usable range ends at 19. ROBOTICS enables the
+      # spatial (delta 20, hole-fill 2) and speckle (range 200) filters and
+      # clamps output to 0-10 m. Measured here: valid pixels 64.4% -> 59.3%,
+      # and the 50 m+ phantom returns disappear entirely. On a robot in a
+      # 6x6 m arena, whose diagonal is 8.5 m, the 10 m clamp costs nothing.
+      #
+      # Its decimation factor of 2 does NOT change the published size - depth
+      # still comes out colour-aligned at 1280x720, verified on the device - but
+      # it does mean disparity is computed at half resolution and upsampled, so
+      # fine detail is coarser than the pixel count suggests.
+      #
+      # NOTE: the preset is applied below the ROS parameter layer and is
+      # invisible to `ros2 param get` - i_stereo_conf_threshold and every
+      # i_enable_*_filter read the same under any preset. The enable flags are
+      # enable-ONLY: leaving them false does not switch off what the preset
+      # turned on. Confirm with camera.i_pipeline_dump:=true, which writes the
+      # exact StereoDepth config sent to the device to
+      # /tmp/<device-id>_pipeline.json.
+      i_depth_preset: ROBOTICS
+      # The two settings the driver would otherwise apply ON TOP of the preset,
+      # pinned back to the preset's own values. Confirmed necessary from a
+      # pipeline dump: without these the device ran median 5 and confidence 240
+      # while every other ROBOTICS value came through intact.
+      i_depth_filter_size: 7        # KERNEL_7x7; the driver default 5 overrides
+      i_stereo_conf_threshold: 245  # preset value; the driver default is 240
+    imu:
+      # The driver default is 400 Hz, which this device does not reach: the
+      # merged accel + gyro stream tops out near 250 Hz. 100 Hz matches the
+      # update_rate the simulated BMI270 is declared at.
+      i_acc_freq: 100
+      i_gyro_freq: 100
+      i_message_type: IMU

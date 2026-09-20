@@ -1,0 +1,20 @@
+# UGV02 chassis MCU: a CH343/CH9102 USB-serial bridge (1a86:55d3) that presents
+# itself as CDC-ACM, so the kernel binds cdc_acm and it enumerates as an
+# arbitrary ttyACM* depending on what else was plugged in first - exactly the
+# problem /dev/ldlidar solves for the lidar. einride_mini_truck_hardware's
+# config/hardware.yaml names the port as /dev/ugv02, so this rule is what
+# makes that name exist.
+#
+# Matched by vendor and product rather than by ATTRS{serial}, for the same
+# reason 99-einride-ldlidar.rules matches the CP210x that way: the serial is
+# per-board, so a rule carrying one would have to be edited for every robot.
+# The cost is that a second 1a86:55d3 bridge on the same machine would race for
+# the symlink. If that ever happens, add ATTRS{serial}=="..." to this line and
+# accept that the file is then per-robot.
+#
+# MODE and GROUP restate what Ubuntu's own 50-udev-default.rules already gives a
+# ttyACM*, so this rule grants no access the chassis did not already have; the
+# stable name is the whole point of it. Being in dialout is still required, and
+# provision.sh puts the service account there.
+KERNEL=="ttyACM*", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d3", \
+    MODE:="0660", GROUP:="dialout", SYMLINK+="ugv02"

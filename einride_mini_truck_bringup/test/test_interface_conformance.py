@@ -27,9 +27,9 @@ Scope, deliberately (topic, type, QoS) only:
   einride_mini_truck_hardware's pty replay tests. There is no serial device
   here, so ugv02_serial_node advertises its topics but publishes nothing, and
   no message content can be compared from this side.
-* the lidar and camera drivers are not installed off the robot, so they are
-  switched off and their topics are listed as environment-missing rather than
-  silently ignored.
+* the lidar and camera drivers are switched off - the lidar is not installed
+  off the robot and the camera needs one on the USB bus - so their topics are
+  listed as environment-missing rather than silently ignored.
 
 Everything the deferred odometry phase will provide is listed explicitly below,
 so this test documents the gap instead of failing opaquely when it finds one.
@@ -71,6 +71,7 @@ EXPECTED_QOS = {
     '/voltage': RELIABLE_QOS,
     '/robot_description': (ReliabilityPolicy.RELIABLE,
                            DurabilityPolicy.TRANSIENT_LOCAL),
+    '/joint_states': RELIABLE_QOS,
 }
 
 # Provided by robot_state_publisher, which is in common.launch.py and therefore
@@ -80,27 +81,55 @@ SHARED_TOPICS = {
     '/tf_static': 'tf2_msgs/msg/TFMessage',
 }
 
+# Present in both modes with the same type and QoS, but not byte-identical
+# machinery the way SHARED_TOPICS is: simulation's joint_state_throttle
+# downsamples the bridged gz JointStatePublisher feed (all six wheels),
+# hardware's joint_state_relay forwards ugv02_serial_node's /wheel_encoders
+# (front axle only - see hardware.launch.py). Content therefore differs; only
+# name, type and QoS are asserted here, which is this file's whole scope.
+JOINT_STATES_TOPIC = {'/joint_states': 'sensor_msgs/msg/JointState'}
+
 # Deferred to the wheel-odometry phase. Present in simulation, absent on
 # hardware, and expected to stay that way until that phase lands. See
 # HARDWARE_HAL_PLAN.md, "Deferred to a later phase".
 DEFERRED_TOPICS = {
     '/odom': 'nav_msgs/msg/Odometry',
     '/joint_states_raw': 'sensor_msgs/msg/JointState',
-    '/joint_states': 'sensor_msgs/msg/JointState',
 }
 
-# Simulation-only, and unfixable: a real robot has no simulated clock. Every
-# node's use_sim_time flips because of this one topic.
-SIM_ONLY_TOPICS = {'/clock'}
+# Simulation-only. /clock is unfixable - a real robot has no simulated clock, and
+# every node's use_sim_time flips because of this one topic.
+#
+# /scan/raw is simulation-only by construction: it is the bridge's raw gz scan,
+# and ld19_scan_model consumes it and publishes the /scan that both modes share.
+# The robot's driver produces a finished scan directly, so it has no equivalent
+# and should not grow one. See "Matching the real LiDAR" in the README.
+SIM_ONLY_TOPICS = {'/clock', '/scan/raw'}
 
 # Hardware-only. Harmless; a battery model in the simulation would close it.
 HARDWARE_ONLY_TOPICS = {'/voltage'}
 
-# Provided on the robot by ldlidar and depthai_ros_driver, neither of which is
-# installed off it. Listed so that "not compared here" is a stated fact rather
-# than an omission.
+# Provided on the robot by ldlidar_component and depthai_ros_driver. Both are
+# switched off below - ldlidar_component because it is built from source and is
+# usually not installed off the robot, depthai because it needs a camera on the
+# USB bus and this test must pass on a machine with none. Listed so that "not
+# compared here" is a stated fact rather than an omission.
+#
+# /scan's own content is compared against the real device in
+# test_lidar_scan_contract.py, and against Gazebo in einride_mini_truck_gazebo's
+# test_ld19_scan_model.py. Neither is reachable from here.
+#
+# The four names after /scan and /scan/points are what the lidar drags in with
+# it on hardware: its private ~/scan, which scan_relay reads and republishes as
+# /scan, its lifecycle transition_event, and the bond and diagnostics its
+# lifecycle manager keeps. /clock belongs to that set too - nav2's lifecycle
+# manager subscribes to it whatever use_sim_time says - which is why it is a
+# subscription there and never a publication, and why test_clock_is_simulation_only
+# below checks publishers rather than topics.
 DRIVER_TOPICS = {
     '/scan', '/scan/points',
+    '/ldlidar_node/scan', '/ldlidar_node/transition_event',
+    '/bond', '/diagnostics',
     '/oak/rgb/image_raw', '/oak/rgb/camera_info',
     '/oak/stereo/image_raw', '/oak/stereo/camera_info',
     '/oak/points', '/oak/imu/data',
@@ -266,15 +295,16 @@ def graphs():
     try:
         simulation = _launch(
             ['simulation.launch.py', 'headless:=true', 'rviz:=false'],
-            (set(HAL_TOPICS) | set(SHARED_TOPICS) | set(DEFERRED_TOPICS)
-             | SIM_ONLY_TOPICS),
+            (set(HAL_TOPICS) | set(SHARED_TOPICS) | set(JOINT_STATES_TOPIC)
+             | set(DEFERRED_TOPICS) | SIM_ONLY_TOPICS),
             SIM_STARTUP_TIMEOUT)
         hardware = _launch(
-            # The drivers are not installed off the robot; the serial port does
-            # not exist either, but the node advertises regardless, which is
-            # exactly what this test needs to see.
+            # Both drivers are switched off - see DRIVER_TOPICS. The serial port
+            # does not exist either, but the node advertises regardless, which
+            # is exactly what this test needs to see.
             ['hardware.launch.py', 'rviz:=false', 'lidar:=false', 'camera:=false'],
-            set(HAL_TOPICS) | set(SHARED_TOPICS) | HARDWARE_ONLY_TOPICS,
+            (set(HAL_TOPICS) | set(SHARED_TOPICS) | set(JOINT_STATES_TOPIC)
+             | HARDWARE_ONLY_TOPICS),
             HARDWARE_STARTUP_TIMEOUT)
         yield simulation, hardware
     finally:
@@ -341,6 +371,20 @@ def test_tf_static_is_transient_local(graphs):
             ReliabilityPolicy.RELIABLE, DurabilityPolicy.TRANSIENT_LOCAL)
 
 
+def test_joint_states_is_published_in_both_modes(graphs):
+    """See JOINT_STATES_TOPIC for why this isn't in SHARED_TOPICS instead.
+
+    Without a publisher here, robot_state_publisher never broadcasts TF for any
+    wheel joint and every wheel frame sits at its zero-pose URDF default - the
+    bug this relay/throttle pair exists to close.
+    """
+    simulation, hardware = graphs
+    assert simulation.publishers.get('/joint_states') == JOINT_STATES_TOPIC['/joint_states']
+    assert hardware.publishers.get('/joint_states') == JOINT_STATES_TOPIC['/joint_states']
+    assert simulation.qos('/joint_states') == hardware.qos('/joint_states')
+    assert hardware.qos('/joint_states') == EXPECTED_QOS['/joint_states']
+
+
 # ---------------------------------------------------------- documented gaps
 
 @pytest.mark.parametrize('topic', sorted(DEFERRED_TOPICS))
@@ -359,10 +403,27 @@ def test_deferred_topics_are_missing_on_hardware(graphs, topic):
 
 
 def test_clock_is_simulation_only(graphs):
-    """The single most likely cause of "works in sim, stalls on hardware"."""
+    """The single most likely cause of "works in sim, stalls on hardware".
+
+    Publishers, not topics: with lidar:=true the robot does carry a /clock
+    *subscription*, because nav2's lifecycle manager creates one whatever
+    use_sim_time says. Nothing publishes it there, which is the thing that
+    matters.
+    """
     simulation, hardware = graphs
     assert '/clock' in simulation.publishers
-    assert '/clock' not in hardware.topics
+    assert '/clock' not in hardware.publishers
+
+
+def test_raw_scan_does_not_leak_out_of_simulation(graphs):
+    """/scan is the contract; /scan/raw is simulation's own plumbing.
+
+    If this ever fails on the hardware side, something started bridging or
+    renaming the robot's scan instead of letting the driver publish it.
+    """
+    simulation, hardware = graphs
+    assert simulation.publishers.get('/scan/raw') == 'sensor_msgs/msg/LaserScan'
+    assert '/scan/raw' not in hardware.topics
 
 
 def test_voltage_is_hardware_only(graphs):
@@ -375,9 +436,10 @@ def test_voltage_is_hardware_only(graphs):
 def test_driver_topics_are_absent_here(graphs):
     """States the limit of this test rather than pretending to cover it.
 
-    ldlidar and depthai_ros_driver are not installed off the robot, so both
-    were switched off. If one of these ever shows up on the hardware side, this
-    environment gained the drivers and the comparison should be widened.
+    Both drivers were switched off: ldlidar is not installed off the robot, and
+    depthai needs a camera on the USB bus, which cannot be assumed here. If one
+    of these ever shows up on the hardware side, the launch stopped honouring
+    its own lidar:= / camera:= arguments.
     """
     _, hardware = graphs
     assert DRIVER_TOPICS.isdisjoint(hardware.topics)
@@ -386,9 +448,9 @@ def test_driver_topics_are_absent_here(graphs):
 def test_no_unexpected_topic_in_either_mode(graphs):
     """Catches drift in the direction the explicit lists cannot: new topics."""
     simulation, hardware = graphs
-    known = (set(HAL_TOPICS) | set(SHARED_TOPICS) | set(DEFERRED_TOPICS)
-             | SIM_ONLY_TOPICS | HARDWARE_ONLY_TOPICS | DRIVER_TOPICS
-             | {'/tf', '/parameter_events', '/rosout'})
+    known = (set(HAL_TOPICS) | set(SHARED_TOPICS) | set(JOINT_STATES_TOPIC)
+             | set(DEFERRED_TOPICS) | SIM_ONLY_TOPICS | HARDWARE_ONLY_TOPICS
+             | DRIVER_TOPICS | {'/tf', '/parameter_events', '/rosout'})
     assert simulation.topics - known == set()
     assert hardware.topics - known == set()
 

@@ -1,0 +1,104 @@
+# Copyright 2025 Einride AB
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Runs hardware.launch.py on the Jetson Orin Nano at boot.
+#
+# This is a template. Every at-sign placeholder is filled in by provision.sh or
+# deploy.sh, which are also what install the result. The installed copy under
+# /etc/systemd/system is a build product: edit this file and redeploy, do not
+# edit that one, or the next deploy silently reverts you.
+#
+# Everything an operator would reasonably want to change - which drivers start,
+# the domain ID, extra launch arguments - lives in /etc/default/@SERVICE_NAME@
+# instead, which a deploy deliberately does not overwrite.
+
+[Unit]
+Description=Einride mini truck ROS 2 stack (hardware.launch.py)
+
+# DDS discovery binds multicast to a real interface at startup. Started before
+# the network is up, the stack comes alive but its participants never find
+# anything off-board, which looks like a working robot that nothing can talk to.
+After=network-online.target
+Wants=network-online.target
+
+# /dev/ldlidar and the OAK-D's USB node are created by udev, which can still be
+# settling when multi-user.target is reached. A first start that races it fails
+# in the lidar lifecycle manager, so the restart window below is sized to cover
+# that rather than to mask a genuinely broken device: ten tries at five second
+# intervals, then systemd gives up and the journal holds the real reason.
+StartLimitIntervalSec=120
+StartLimitBurst=10
+
+[Service]
+# exec, not simple: systemd reports the start as successful only once the
+# wrapper has actually been execve'd, so a bad path or a lost executable bit
+# fails at `systemctl start` instead of being reported as a running service
+# that died a moment later.
+Type=exec
+
+# Not root. The chassis UART, the lidar and the camera are all reachable to an
+# ordinary user through the udev rules provision.sh installs, and nothing
+# the stack does needs more than that. systemd grants the account's
+# supplementary groups from /etc/group, so dialout and video membership carries
+# over without being restated here.
+#
+# @WORKSPACE@ is root-owned and this user cannot write to it, deliberately: the
+# account the robot is driven from has no reason to be able to rewrite the code
+# it runs. Deploying new code goes through deploy.sh, which uses sudo.
+User=@RUN_USER@
+WorkingDirectory=@WORKSPACE@
+
+# Optional (the leading '-'): the service still starts if the file was removed,
+# falling back to the defaults baked into the wrapper.
+EnvironmentFile=-/etc/default/@SERVICE_NAME@
+
+# Without this, Python buffers when stdout is a pipe rather than a terminal -
+# which it always is under systemd - and node output reaches the journal in
+# delayed blocks, or not at all if the process is killed.
+Environment=PYTHONUNBUFFERED=1
+# ROS colourises when it thinks it has a terminal; in the journal that is just
+# escape sequences wrapped around every line.
+Environment=RCUTILS_COLORIZED_OUTPUT=0
+
+ExecStart=/usr/local/lib/@SERVICE_NAME@/run-hardware.sh
+
+Restart=on-failure
+RestartSec=5
+
+# ros2 launch shuts its nodes down in order on SIGINT. On the default SIGTERM
+# it exits faster and less carefully, which on this robot means the chassis MCU
+# can be left holding the last commanded velocity - a stopped service and a
+# still-driving rover. cmd_vel_timeout in hardware.yaml is the backstop for
+# that; this is the part that avoids needing it.
+KillSignal=SIGINT
+# mixed: the stop signal goes to the main process only, so ros2 launch gets to
+# tear down its own children instead of every node being signalled behind its
+# back. The final SIGKILL, after TimeoutStopSec, still goes to the whole cgroup,
+# so nothing survives a hung shutdown.
+KillMode=mixed
+TimeoutStopSec=30
+
+SyslogIdentifier=@SERVICE_NAME@
+
+# Deliberately the only sandboxing knob set here. The obvious neighbours are all
+# wrong for this service and are listed so they do not get "hardened" back in:
+#   ProtectHome    - the workspace and ~/.ros/log live under the user's home.
+#   PrivateTmp     - puts the stack in a private /tmp namespace, so `ros2 topic
+#                    echo` from an ssh session lands in a different one and DDS
+#                    interop with it breaks in a way nothing reports.
+#   PrivateDevices - removes /dev/ugv02, /dev/ldlidar and the camera.
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

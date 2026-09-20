@@ -1,0 +1,56 @@
+# ldlidar_component parameters for the InnoMaker LD19P on einride-mini-truck.
+#
+# This file exists instead of ldlidar_node's shipped params/ldlidar.yaml because
+# three of that file's defaults are wrong for this robot, and two of them are
+# wrong for any LD19:
+#
+#   frame_id   ldlidar_link -> base_lidar_link. The robot's own frame, declared
+#              by model.sdf and published by robot_state_publisher. Left at the
+#              driver default, /scan would be stamped with a frame no TF tree
+#              here contains, and every transform of a scan point would fail.
+#   range_min  0.03 -> 0.02   } the LD19 datasheet (v1.0, "Range", 70% target
+#   range_max  15.0 -> 12.0   } reflectivity) says 0.02-12 m. The shipped 15.0
+#              claims 3 m the device does not have, and both numbers are copied
+#              verbatim into every LaserScan, so a consumer that trusts
+#              range_max was being told the wrong thing in the direction that
+#              matters. model.sdf's <range> carries these same two numbers.
+#
+# The rest are the driver's defaults, restated rather than inherited so that
+# what the robot runs with is readable in one place:
+#
+#   bins 455   The LD19 samples at a fixed 4500 Hz, so points per revolution
+#              follow the spin rate: this unit spins at 9.89 Hz, and
+#              4500/9.89 = 455. The driver needs a fixed bin count to keep the
+#              message size stable for SLAM Toolbox, and 455 is the value that
+#              costs almost no aliasing on this unit. If a unit spins at a
+#              different rate, re-measure (ros2 topic hz /scan) and set both
+#              this and <samples> in model.sdf to 4500/rate.
+#   rot_verse  CCW, i.e. REP-103: yaw increases counter-clockwise seen from
+#              above. CW would silently mirror every bearing.
+#   units      M. The device reports millimetres; 'M' is what makes /scan
+#              metres, as sensor_msgs/LaserScan requires.
+/**:
+  ros__parameters:
+    general:
+      debug_mode: false
+
+    comm:
+      # The symlink from the driver's own udev rule (rules/ldlidar.rules, 
+      # installed by scripts/create_udev_rules.sh). It points at whichever
+      # ttyUSB* the CP2102 bridge enumerated as, which is not stable across
+      # reboots when anything else on the robot is also a USB serial device.
+      serial_port: '/dev/ldlidar'
+      baudrate: 230400        # fixed for LD19; STL27L would be 921600
+      timeout_msec: 1000
+
+    lidar:
+      model: 'LD19'
+      rot_verse: 'CCW'
+      units: 'M'
+      frame_id: 'base_lidar_link'
+      bins: 455
+      range_min: 0.02
+      range_max: 12.0
+      enable_angle_crop: false
+      angle_crop_min: 90.0
+      angle_crop_max: 270.0

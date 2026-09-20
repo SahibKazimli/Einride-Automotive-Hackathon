@@ -11,6 +11,16 @@
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
+  <!-- tools/sdf_to_urdf.cpp, which turns model.sdf into the model.urdf
+       robot_description carries. sdformat_urdf is the same converter
+       robot_state_publisher used to run on the SDF in-process, so the
+       frames it produces are the ones the stack already uses. -->
+  <build_depend>sdformat_urdf</build_depend>
+  <build_depend>sdformat_vendor</build_depend>
+  <build_depend>tinyxml2_vendor</build_depend>
+  <build_depend>urdfdom</build_depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
   <test_depend>ament_lint_auto</test_depend>
 
   <export>
