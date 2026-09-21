@@ -50,6 +50,19 @@ install(
   DESTINATION share/${PROJECT_NAME}/models/einride_mini_truck
 )
 
+# The OAK-D Lite's factory EEPROM calibration, dumped off the device with
+# camera.i_calibration_dump. It lives here rather than in the bringup or gazebo
+# package because it describes the robot's geometry, the same as model.sdf does -
+# it is the part of that geometry only the device can state. On hardware the
+# driver reads it straight off the camera; simulation reads this copy, so the
+# filename carries the mxid to make it obvious that it belongs to ONE device.
+# Swap the camera and this file has to be re-dumped.
+install(
+  DIRECTORY
+    calibration/
+  DESTINATION share/${PROJECT_NAME}/calibration
+)
+
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
   ament_lint_auto_find_test_dependencies()

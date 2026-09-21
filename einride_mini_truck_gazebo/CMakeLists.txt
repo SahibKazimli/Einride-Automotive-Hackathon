@@ -209,9 +209,17 @@ endforeach()
 # The simulation-side stand-in for the LD19 driver: gz's gpu_lidar gets the scan
 # geometry right but not the message semantics. Python rather than another gz
 # system plugin because it acts on the ROS side of the bridge, after gz is done.
+#
+# oak_calibration_tf is the same idea for the camera: model.sdf deliberately does
+# not declare the frames inside the OAK-D Lite, because only the device knows
+# where its own sensors are. On hardware the driver publishes them from the
+# camera's EEPROM; this replays the same arithmetic over a dump of that EEPROM so
+# simulation's TF tree is the same tree.
 ament_python_install_package(${PROJECT_NAME})
 install(
-  PROGRAMS scripts/ld19_scan_model
+  PROGRAMS
+    scripts/ld19_scan_model
+    scripts/oak_calibration_tf
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -238,6 +246,16 @@ if(BUILD_TESTING)
   # needs no Gazebo and no lidar on the USB bus.
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_ld19_scan_model test/test_ld19_scan_model.py)
+
+  # Asserts the simulated camera frames against a /tf_static snapshot recorded
+  # from the real OAK-D Lite, so it needs neither Gazebo nor a camera on the USB
+  # bus. This is the only sim-versus-hardware check any camera frame has.
+  ament_add_pytest_test(test_oak_calibration_tf test/test_oak_calibration_tf.py)
+
+  # model.sdf has to state where the mono sensors sit, which duplicates numbers
+  # the calibration dump already holds. This recomputes them rather than trusting
+  # the copy, so the two cannot drift apart silently.
+  ament_add_pytest_test(test_mono_pair_model test/test_mono_pair_model.py)
 endif()
 
 

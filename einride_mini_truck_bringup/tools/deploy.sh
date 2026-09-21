@@ -21,10 +21,19 @@ WORKSPACE="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
 # launch files and the parameter YAMLs are edited as often as the code is, and a
 # deploy that silently did not pick up a change to hardware.launch.py would be a
 # trap.
+#
+# einride_mini_truck_description is here for the same reason, and for a sharper
+# one. provision.sh builds it on the robot, so it used to be left out; but the
+# frames the camera driver publishes and the frames model.sdf publishes must not
+# overlap, and that agreement lives half in each package. Ship bringup alone and
+# the robot runs a new oak_d_lite.yaml against an old model.urdf, which puts two
+# publishers on one child frame - a race tf2 resolves by arrival order, per
+# subscriber, without warning.
 DEV_PACKAGES=(
     einride_mini_truck_application
     einride_mini_truck_hardware
     einride_mini_truck_bringup
+    einride_mini_truck_description
 )
 
 # .pyc files record the path they were compiled from and Python regenerates them

@@ -1,0 +1,81 @@
+# /tf_static as the REAL OAK-D Lite published it, recorded 2026-09-20 from device
+# mxid 194430107146157E00 running the configuration in oak_d_lite.yaml.
+#
+# This is ground truth for test_oak_calibration_tf.py: not what the algorithm is
+# believed to do, but what the driver actually put on the wire. Re-record it if
+# the camera is ever swapped, alongside the calibration dump in
+# einride_mini_truck_description/calibration/.
+#
+# The chain roots at 'oak', which model.sdf declares as a token link identity to
+# oak_d_lite_link. That name is forced: the driver reuses i_tf_base_frame as the
+# prefix for every image frame_id, so it has to match the node's name.
+#
+# The driver's seventh transform, oak_imu_frame, is deliberately absent - it is
+# 120 degrees wrong and both modes take that frame from model.sdf instead.
+transforms:
+- parent: oak_right_camera_frame
+  child: oak_left_camera_frame
+  translation:
+  - 0.00034402064979076384
+  - 0.07475176334381103
+  - 0.00040360979735851285
+  rotation:
+  - 0.004430022388981658
+  - 0.010037934502680812
+  - 0.0007277090227938987
+  - 0.9999395441615825
+- parent: oak_left_camera_frame
+  child: oak_left_camera_optical_frame
+  translation:
+  - 0.0
+  - 0.0
+  - 0.0
+  rotation:
+  - -0.5
+  - 0.5
+  - -0.5
+  - 0.5
+- parent: oak
+  child: oak_rgb_camera_frame
+  translation:
+  - 0.0
+  - 0.0
+  - 0.0
+  rotation:
+  - 0.0
+  - 0.0
+  - 0.0
+  - 1.0
+- parent: oak_rgb_camera_frame
+  child: oak_rgb_camera_optical_frame
+  translation:
+  - 0.0
+  - 0.0
+  - 0.0
+  rotation:
+  - -0.5
+  - 0.5
+  - -0.5
+  - 0.5
+- parent: oak_rgb_camera_frame
+  child: oak_right_camera_frame
+  translation:
+  - -0.0006956260651350022
+  - -0.03699851036071777
+  - -0.000410039946436882
+  rotation:
+  - 0.001592249434432036
+  - -0.004105964087700836
+  - 0.002366026641559077
+  - 0.9999874978476064
+- parent: oak_right_camera_frame
+  child: oak_right_camera_optical_frame
+  translation:
+  - 0.0
+  - 0.0
+  - 0.0
+  rotation:
+  - -0.5
+  - 0.5
+  - -0.5
+  - 0.5

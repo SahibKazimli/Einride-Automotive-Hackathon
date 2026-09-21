@@ -124,6 +124,23 @@ def generate_launch_description():
         output='both',
     )
 
+    # The frames inside the OAK-D Lite, which model.sdf deliberately does not
+    # declare: on hardware depthai_ros_driver publishes them from the camera's own
+    # EEPROM, because a description cannot know which physical camera is fitted.
+    # This replays the same arithmetic over a checked-in dump of that EEPROM, so
+    # both modes carry the same tree rather than two hand-synced copies of it.
+    #
+    # It publishes the six camera frames only. oak_imu_frame comes from model.sdf
+    # in BOTH modes - the driver's version of that one transform is 120 degrees
+    # wrong, so hardware suppresses it too. See the node's docstring.
+    oak_calibration_tf = Node(
+        package='einride_mini_truck_gazebo',
+        executable='oak_calibration_tf',
+        name='oak_calibration_tf',
+        parameters=[{'use_sim_time': True}],
+        output='both',
+    )
+
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -168,5 +185,6 @@ def generate_launch_description():
         ld19_scan_model,
         scan_to_points,
         joint_state_throttle,
+        oak_calibration_tf,
         common,
     ])

@@ -114,6 +114,49 @@
   gz_type_name: "gz.msgs.CameraInfo"
   direction: GZ_TO_ROS
 
+# The raw OV7251 mono pair, 640x480 mono8 - the stereo INPUT, not a view of the
+# depth output above, which is colour-aligned and colour-sized. Hardware publishes
+# these because oak_d_lite.yaml sets left/right i_publish_topic.
+#
+# No qos_profile key, matching the other camera entries: images bridge RELIABLE,
+# only the IMU/mag/encoder streams are SENSOR_DATA.
+#
+# The images match; the camera_info beside them does not, and the interesting part
+# is not the obvious bit. No rational_polynomial distortion, and the principal
+# point lands at exactly 320/240 against the device's 333.7/257.5 - expected.
+#
+# The one that bites is P[3], the baseline term. gz has no notion of a stereo pair,
+# so it gives each camera -fx * its own lateral offset in the link: measured here
+# as -17.089 left and -16.792 right, which is exactly -fx * |pose y| to the micron.
+# The real camera instead puts the WHOLE baseline on the left, -33.837, and leaves
+# the right at 0. So a consumer reading the simulated left camera_info infers a
+# 37.75 mm baseline where the truth is 74.75, and the simulated right disagrees
+# with both. stereo_image_proc against the simulated pair is not degraded, it is
+# wrong - triangulate from the TF tree instead, which IS correct in both modes.
+- ros_topic_name: "/oak/left/image_raw"
+  gz_topic_name: "/oak/left/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/oak/left/camera_info"
+  gz_topic_name: "/oak/left/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/oak/right/image_raw"
+  gz_topic_name: "/oak/right/image_raw"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "gz.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/oak/right/camera_info"
+  gz_topic_name: "/oak/right/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "gz.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
 - ros_topic_name: "/oak/imu/data"
   gz_topic_name: "/oak/imu/data"
   ros_type_name: "sensor_msgs/msg/Imu"

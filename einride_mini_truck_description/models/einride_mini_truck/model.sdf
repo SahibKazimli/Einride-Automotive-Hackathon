@@ -459,7 +459,24 @@
          because this model is commonly listed as the variant without one. That
          makes two IMUs on this robot: the chassis one on base_imu_link and the
          camera's, which are separate hardware, separate topics and, note,
-         separate axis conventions. -->
+         separate axis conventions.
+
+         ALL FOUR SENSORS LIVE IN THIS LINK, because gz points a camera down its
+         owning frame's +x and this link is x-forward. The optical frames they
+         name in optical_frame_id - x right, y down, z along the view axis, which
+         is what camera_info and every derived point cloud assume - differ from
+         this one by the usual -90 / 0 / -90 and must not be confused with it.
+         Those frames are strings in the message header here; nothing in this file
+         declares them any more. See the comment above oak_imu_frame for who does.
+
+         One assumption worth naming, since everything else about this camera is
+         now measured: the colour camera's optical centre is taken to be exactly
+         at this link's origin, i.e. at the mesh origin. That was never measured,
+         and with the calibrated extrinsics in place it is the largest remaining
+         error in where this camera sits - a few mm. It is also load-bearing: it
+         is what lets the driver's calibrated subtree graft on, via the 'oak'
+         link below, with an identity transform. -->
+
     <link name='oak_d_lite_link'>
       <pose relative_to='base_footprint'>0.06577 0 0.101953 0 0 0</pose>
       <inertial>
@@ -589,47 +606,152 @@
           <optical_frame_id>oak_rgb_camera_optical_frame</optical_frame_id>
         </camera>
       </sensor>
+
+      <!-- The OV7251 mono pair, published raw. These are the stereo INPUT, not a
+           view of the depth output above: their own 640x480, their own ~70.4
+           degree field, their own optical frames. The real driver publishes them
+           because oak_d_lite.yaml sets left/right i_publish_topic.
+
+           POSES ARE THE DEVICE'S, NOT NOMINAL, and the difference matters: the
+           pair is not symmetric about the colour camera. Right sits 37.00 mm out,
+           left 37.75 mm, so the tempting +/- half-baseline would be 0.75 mm wrong
+           on both. They are the EEPROM extrinsics of mxid 194430107146157E00,
+           expressed relative to oak_d_lite_link - which is legitimate only
+           because that link coincides with the colour camera frame the chain is
+           rooted at. The left-right separation works out to 74.7536 mm against
+           the 74.752 mm implied by the real camera_info's P[3], so the two
+           independent routes to the baseline agree to 1.6 um.
+           einride_mini_truck_description/calibration/ holds the dump, and
+           test_mono_pair_model.py fails the build if these drift from it.
+
+           horizontal_fov is per camera, not one shared value - the two sensors
+           genuinely differ. 320/tan(hfov/2) reproduces the measured fx to 0.0001
+           px (452.6537 against 452.6538, and 453.8518 against 453.8520).
+
+           L8, so the bridge delivers mono8 as the real driver does. gz cannot
+           reproduce the rest of what these streams carry: no rational_polynomial
+           distortion, principal point exactly at centre, and - the one that bites
+           - each camera_info comes out with P[3] = 0, because gz has no notion of
+           a stereo pair. See "Differences between hardware and simulation" in the
+           README before pointing stereo_image_proc at these. -->
+      <sensor name='oak_left' type='camera'>
+        <pose>-0.000709634 0.037752367 0.000232973 0.012028577 0.011845125 0.006326987</pose>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+        <topic>oak/left/image_raw</topic>
+        <gz_frame_id>oak_d_lite_link</gz_frame_id>
+        <camera name='ov7251_left'>
+          <horizontal_fov>1.230740</horizontal_fov>
+          <image><width>640</width><height>480</height><format>L8</format></image>
+          <clip><near>0.05</near><far>50</far></clip>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.005</stddev></noise>
+          <optical_frame_id>oak_left_camera_optical_frame</optical_frame_id>
+        </camera>
+      </sensor>
+
+      <sensor name='oak_right' type='camera'>
+        <pose>-0.000695626 -0.036998510 -0.000410040 0.003165141 -0.008219452 0.004719096</pose>
+        <always_on>1</always_on>
+        <update_rate>30</update_rate>
+        <topic>oak/right/image_raw</topic>
+        <gz_frame_id>oak_d_lite_link</gz_frame_id>
+        <camera name='ov7251_right'>
+          <horizontal_fov>1.228249</horizontal_fov>
+          <image><width>640</width><height>480</height><format>L8</format></image>
+          <clip><near>0.05</near><far>50</far></clip>
+          <noise><type>gaussian</type><mean>0.0</mean><stddev>0.005</stddev></noise>
+          <optical_frame_id>oak_right_camera_optical_frame</optical_frame_id>
+        </camera>
+      </sensor>
     </link>
     <joint name='oak_d_lite_link_joint' type='fixed'>
       <parent>base_link</parent>
       <child>oak_d_lite_link</child>
     </joint>
 
-    <!-- The two frames the depthai driver stamps its messages with. They exist
-         here so that simulation and hardware publish identical frame_ids on
-         identical topics, and so that ONE description owns the TF tree in both
-         modes: hardware.launch.py starts the driver through
-         camera_as_part_of_a_robot.launch.py, which publishes no TF of its own.
-         Booting the driver through the stock camera.launch.py instead would add
-         a second publisher for these same frames.
+    <!-- The camera device origin, and the frame the driver's calibrated subtree
+         hangs off. Identity to oak_d_lite_link, so it looks redundant. It is not,
+         and the reason is worth writing down because the driver gives no hint.
 
-         Massless in all but name - 1 g with 1e-6 inertia, the same token used by
-         base_footprint and base_imu_link, because gz-sim requires every link to
-         carry an inertia. -->
-    <link name='oak_rgb_camera_optical_frame'>
-      <!-- Optical convention: x right, y down, z along the view axis, which is
-           what camera_info and every point cloud derived from it assume. The
-           body link oak_d_lite_link is x-forward, so these differ by the usual
-           -90 / 0 / -90 and the two must not be confused. The camera SENSORS
-           stay in oak_d_lite_link, because gz points a camera down its link's
-           +x; only the frame_id they report is this one. -->
-      <pose relative_to='oak_d_lite_link'>0 0 0 -1.5707963 0 -1.5707963</pose>
+         depthai_ros_driver uses camera.i_tf_base_frame for TWO unrelated things
+         once i_publish_tf_from_calibration is on. sensor_helpers.cpp::tfPrefix
+         returns it as the PREFIX for every image frame_id, while TFPublisher
+         names the frames it publishes after the NODE. Those agree only when the
+         base frame is spelled exactly like the node, i.e. 'oak'. Point the base
+         frame straight at oak_d_lite_link, which is the obvious thing to do and
+         geometrically correct, and the images come out stamped
+         oak_d_lite_link_left_camera_optical_frame while TF carries
+         oak_left_camera_optical_frame - a mismatch that no log line mentions and
+         that leaves every image in a frame nothing publishes. Observed on the
+         robot, which is the only reason this link exists.
+
+         So the driver gets the name it insists on, and this joint is what
+         attaches it to the robot. Massless in all but name, as the other token
+         links are. -->
+    <link name='oak'>
+      <!-- relative_to is NOT optional here, however identity the pose looks. An
+           SDF link with no pose defaults to the MODEL frame, not to whatever its
+           joint parents it to, so omitting this puts oak at base_footprint and
+           the joint below silently absorbs the difference - which drags the
+           entire calibrated camera subtree 66 mm back and 102 mm down, onto the
+           floor. Every other link here states its frame for the same reason. -->
+      <pose relative_to='oak_d_lite_link'>0 0 0 0 0 0</pose>
       <inertial>
         <mass>0.001</mass>
         <inertia><ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz></inertia>
       </inertial>
     </link>
-    <joint name='oak_rgb_camera_optical_joint' type='fixed'>
+    <joint name='oak_joint' type='fixed'>
       <parent>oak_d_lite_link</parent>
-      <child>oak_rgb_camera_optical_frame</child>
+      <child>oak</child>
     </joint>
 
+    <!-- oak_imu_frame is the ONE camera frame this description still owns.
+
+         Everything else inside the camera - oak_{rgb,left,right}_camera_frame and
+         their _camera_optical_frame children - comes from the device's own EEPROM
+         calibration: on hardware from depthai_ros_driver's TFPublisher
+         (camera.i_publish_tf_from_calibration in oak_d_lite.yaml), in simulation
+         from einride_mini_truck_gazebo's oak_calibration_tf, which runs the same
+         algorithm over a checked-in dump of the same EEPROM. A description cannot
+         know which physical camera is bolted on; this one measures 74.75 mm
+         between the mono pair where the nominal figure is 75.
+
+         oak_rgb_camera_optical_frame USED to be declared here and must not be
+         again: two publishers for one child frame is a race tf2 resolves by
+         message arrival order, silently and per subscriber. Its old pose - zero
+         translation from oak_d_lite_link, rotated -90 / 0 / -90 - is exactly what
+         the driver publishes now. That identity is not luck; it is what makes
+         the 'oak' link above - and so oak_d_lite_link, which it is identity to -
+         the frame the driver calls oak_rgb_camera_frame, and it is why the whole
+         calibrated subtree grafts on with no offset.
+
+         WHY THE IMU IS THE EXCEPTION: the driver's IMU transform is wrong.
+         TFPublisher::quatFromRotM computes q_rot2rdf * q_extr * q_rot2rdf^-1, a
+         similarity transform. Correct between two optical camera frames, which
+         both need re-basing; wrong between a camera and the IMU, whose frame is
+         not optical and where only the left factor belongs. The result is off by
+         exactly one q_rot2rdf - 2*acos(0.5), or 120 degrees. Measured on the
+         device, in robot FLU axes: this file gives imu_x = right, imu_y = forward,
+         imu_z = up, matching the README's bench measurement, where the driver
+         gives up / left / back. Translations agree to 0.000 mm. So
+         oak_d_lite.yaml sets camera.i_tf_imu_from_descr true, which suppresses
+         publishImuTransform entirely, and this link stays.
+
+         Massless in all but name - 1 g with 1e-6 inertia, the same token used by
+         base_footprint and base_imu_link, because gz-sim requires every link to
+         carry an inertia. -->
     <link name='oak_imu_frame'>
       <!-- Pose is the device's OWN factory calibration, read back over USB with
            getImuToCameraExtrinsics(CAM_A): the BMI270 sits 31.7 mm to the left
            of the colour camera, 2.2 mm up and 7.1 mm behind it, rotated about
            the optical x axis by 89.3 degrees. In colour-optical terms the IMU
            axes come out imu_x = right, imu_y = forward, imu_z = up.
+
+           Stated relative to oak_d_lite_link, not to the colour optical frame
+           this file no longer declares. Same pose in the world, different parent:
+           these numbers are the old ones composed through the -90 / 0 / -90 that
+           used to sit between the two.
 
            That rotation is the reason this link exists rather than the sensor
            hanging off oak_d_lite_link: the driver publishes the BMI270's raw
@@ -638,7 +760,7 @@
            hardware by 90 degrees. Note this makes /oak/imu/data a DIFFERENT
            axis convention from the chassis /imu, on hardware and in simulation
            alike. -->
-      <pose relative_to='oak_rgb_camera_optical_frame'>-0.031688 -0.002237 -0.007087 1.558876 -0.006180 0.012031</pose>
+      <pose relative_to='oak_d_lite_link'>-0.007087 0.031688 0.002237 -0.011841973 0.012030771 -1.564615879</pose>
       <inertial>
         <mass>0.001</mass>
         <inertia><ixx>1e-6</ixx><ixy>0</ixy><ixz>0</ixz><iyy>1e-6</iyy><iyz>0</iyz><izz>1e-6</izz></inertia>
@@ -685,7 +807,7 @@
       </sensor>
     </link>
     <joint name='oak_imu_joint' type='fixed'>
-      <parent>oak_rgb_camera_optical_frame</parent>
+      <parent>oak_d_lite_link</parent>
       <child>oak_imu_frame</child>
     </joint>
 

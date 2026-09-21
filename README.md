@@ -116,6 +116,8 @@ out.
 |---|---|---|---|---|---|---|
 | colour | 1280x720 @ 30 Hz | 69.85 | 42.90 | 77.41 | `bgr8` | `/oak/rgb/image_raw` |
 | depth | 1280x720 @ 30 Hz | 69.85 | 42.90 | 77.41 | `16UC1` mm | `/oak/stereo/image_raw` |
+| left mono | 640x480 @ 30 Hz | 70.52 | 55.89 | - | `mono8` | `/oak/left/image_raw` |
+| right mono | 640x480 @ 30 Hz | 70.37 | 55.76 | - | `mono8` | `/oak/right/image_raw` |
 
 Depth range is **0.2 - 10 m**, clamped by the ROBOTICS preset (see below); the
 sensor's own optical limit is 19 m. Point cloud on `/oak/points`, camera IMU on
@@ -124,8 +126,21 @@ sensor's own optical limit is 19 m. Point cloud on `/oak/points`, camera IMU on
 Colour and depth share one optical frame, `oak_rgb_camera_optical_frame`. Depth
 is colour-aligned as depthai does by default, which means the published depth
 image is **colour-sized and carries the colour intrinsics** - the mono pair's own
-640x480 and ~70.4 degree field never reach a topic. The two mono streams are not
-exposed separately.
+640x480 and ~70.4 degree field never reach `/oak/stereo/*`.
+
+The mono pair is also published raw, on `/oak/left/*` and `/oak/right/*`, on
+`oak_left_camera_optical_frame` and `oak_right_camera_optical_frame`. These are
+the stereo **input**, not another view of the depth output: unrectified, with
+their own `rational_polynomial` distortion, their own intrinsics, and a measured
+**74.75 mm** baseline. The two sensors are not identical - fx is 452.65 against
+453.85, and they are not even symmetric about the colour camera, which is why
+those numbers come off the device rather than out of a datasheet.
+
+One trap if you feed them to `image_pipeline`: depthai puts the `P[3]` baseline
+term on the **left** `camera_info` and leaves the right at zero. That is the
+reverse of the ROS convention, which expects the left camera to be the origin,
+because depthai computes disparity in the rectified right frame. Swap which
+topic you pass as left and right, or flip `left.i_reverse_stereo_socket_order`.
 
 ### Does the OAK-D Lite have an IMU?
 
@@ -207,7 +222,9 @@ a fix for an observed failure: the IMU was seen advertised-but-silent once on
 the robot and could not be reproduced afterwards across repeated probes out to
 7.5 minutes of uptime, on either key. If it recurs, check `ros2 param list`
 against your build's namespace before suspecting the hardware - but note that a
-one-off silent IMU has been seen and not yet explained.
+one-off silent IMU has been seen and not yet explained. That episode, what was
+eliminated, and what to capture if it recurs are written up in
+[`OAK_IMU_INVESTIGATION.md`](OAK_IMU_INVESTIGATION.md).
 
 The full configuration lives in
 [`einride_mini_truck_bringup/config/oak_d_lite.yaml`](einride_mini_truck_bringup/config/oak_d_lite.yaml),
@@ -335,12 +352,103 @@ under depthai v2. The two ROS packages install side by side, so having v3
 present is harmless as long as the launch file asks for v2.
 
 `hardware.launch.py` starts the driver through
-**`camera_as_part_of_a_robot.launch.py`**, not the usual `camera.launch.py`. The
-former publishes no TF and no camera URDF, which is what a camera bolted to a
-robot that already has a description needs; `camera.launch.py` brings its own
-`robot_state_publisher` and its own `oak_*` frames, which would collide with the
-ones `model.sdf` declares. Frame names are unchanged either way, so `model.sdf`
-owns the TF tree in both simulation and hardware.
+**`camera_as_part_of_a_robot.launch.py`**, not the usual `camera.launch.py`,
+which would bring its own `robot_state_publisher` to fight the one
+`common.launch.py` already runs.
+
+### Who owns the camera's frames
+
+Split, deliberately, and it is worth knowing which half you are looking at.
+
+**`model.sdf` owns where the camera body sits** - `oak_d_lite_link` - and it owns
+`oak_imu_frame`. **The device's own EEPROM owns the optics**:
+`oak_{rgb,left,right}_camera_frame` and their `_camera_optical_frame` children.
+A description cannot know which physical camera is bolted on, and the difference
+is measurable - this unit's mono pair sits 74.75 mm apart where the nominal
+figure is 75, and is not symmetric about the colour camera.
+
+On hardware those frames come from the driver, via
+`camera.i_publish_tf_from_calibration` in `oak_d_lite.yaml`. In simulation they
+come from `einride_mini_truck_gazebo`'s `oak_calibration_tf`, which runs the same
+algorithm over a checked-in dump of the same EEPROM
+(`einride_mini_truck_description/calibration/`). Same input, same arithmetic, so
+the two trees agree by construction rather than by someone keeping two lists in
+step - and `test_oak_calibration_tf.py` checks the result against `/tf_static` as
+recorded off the real camera.
+
+The whole tree, with the owner of each edge. It is identical in both modes, which
+is the point:
+
+```
+base_footprint                                  robot_state_publisher, from model.urdf
+└── base_link
+    ├── base_imu_link                           chassis ICM-20948 / AK09916
+    ├── base_lidar_link                         LD19P
+    ├── <six wheel links>                       moved by /joint_states
+    └── oak_d_lite_link                         the camera body - the mount
+        ├── oak_imu_frame                       still model.sdf: the driver's is 120 deg wrong
+        └── oak                                 identity. the name the driver insists on
+            └── oak_rgb_camera_frame            identity. everything below: device EEPROM,
+                │                                 via the driver on hardware and
+                │                                 oak_calibration_tf in simulation
+                ├── oak_rgb_camera_optical_frame
+                └── oak_right_camera_frame      -37.00 mm
+                    ├── oak_right_camera_optical_frame
+                    └── oak_left_camera_frame   +74.75 mm from right
+                        └── oak_left_camera_optical_frame
+```
+
+Two things about that shape are easy to get wrong. The cameras form a **chain**,
+not a star - each is parented to the socket its EEPROM extrinsics point at, so
+left hangs off right rather than off the body. And every `_camera_frame` is FLU
+while every `_camera_optical_frame` is x-right / y-down / z-forward; they differ
+by a fixed `-pi/2, 0, -pi/2` and `camera_info` refers to the optical one.
+
+The two halves must not overlap. `model.sdf` therefore no longer declares
+`oak_rgb_camera_optical_frame`: while it did, `/tf_static` carried that frame
+twice with different parents. That is not an error anything reports - tf2's
+static cache is keyed by child frame and simply overwrites, and the topic is
+latched, so which parent a subscriber believes depends on message arrival order.
+
+The graft between the halves is exact rather than approximate. The driver bolts
+the root of its socket chain to `i_tf_base_frame` with an identity transform, and
+on this device that root is the colour camera, which `model.sdf` already places
+at `oak_d_lite_link`'s origin with exactly the `-pi/2, 0, -pi/2` the driver
+hardcodes. If a replacement camera ever rooted its chain at a mono socket
+instead, that origin would silently be redefined as the mono camera's centre and
+the whole assembly would shift ~37 mm; `test_oak_calibration_tf.py` asserts the
+root is the colour camera for that reason.
+
+#### Why there is a link called `oak`
+
+`model.sdf` declares a token link named `oak`, identity to `oak_d_lite_link`,
+whose only job is to be what `i_tf_base_frame` points at. It looks redundant. It
+is not, and the reason is a trap worth knowing before you tidy it away.
+
+`i_tf_base_frame` does **two unrelated jobs** once
+`i_publish_tf_from_calibration` is on. `sensor_helpers.cpp::tfPrefix` returns it
+as the prefix for every **image** `frame_id`, while `TFPublisher` names the
+frames it **publishes** after the node instead:
+
+```cpp
+std::string tfPrefix(std::shared_ptr<rclcpp::Node> node) {
+    if(node->get_parameter("camera.i_publish_tf_from_calibration").as_bool()) {
+        return node->get_parameter("camera.i_tf_base_frame").as_string();
+    }
+    return node->get_name();
+}
+```
+
+So the two only agree when the base frame is spelled exactly like the node. Point
+it straight at `oak_d_lite_link` - the obvious move, and geometrically correct -
+and the robot publishes TF for `oak_left_camera_optical_frame` while stamping its
+images `oak_d_lite_link_left_camera_optical_frame`. Nothing warns; every image
+just sits in a frame that does not exist. This was found on the robot, not by
+reading the source, which is why the link is there.
+
+Expect one puzzling log line on the robot: `Published URDF`. The driver runs
+`xacro` and hands the result to a node called `oak_state_publisher`, which
+nothing here starts, so it goes nowhere. Harmless.
 
 ## Inertial sensing
 
@@ -386,6 +494,32 @@ Simulation reproduces this rather than papering over it: `model.sdf` places
 `getImuToCameraExtrinsics(CAM_A)` - 31.7 mm left of the colour camera, 2.2 mm up,
 7.1 mm behind, rotated 89.3 degrees about the optical x axis. Fuse the two only
 through TF, never by adding their vectors.
+
+#### `oak_imu_frame` is the one camera frame the driver does not get to publish
+
+Everything else inside the camera now comes from the device's own calibration
+(see "Who owns the camera's frames"), so the obvious thing would be to let the
+driver publish this one too. It must not, because **that transform of the
+driver's is wrong by 120 degrees**, and `oak_d_lite.yaml` sets
+`camera.i_tf_imu_from_descr: 'true'` to suppress it. Do not simplify that away.
+
+`depthai_bridge`'s `TFPublisher::quatFromRotM` computes
+`q_rot2rdf * q_extr * q_rot2rdf^-1`, a similarity transform. That is correct
+between two optical camera frames, where both sides need rebasing into FLU. It is
+wrong between a camera and the IMU, whose frame is not optical and where only the
+left factor belongs, so the result is off by exactly one `q_rot2rdf` - an angle of
+`2*acos(0.5)`, or 120 degrees. Measured on the device, expressing the IMU axes in
+the robot's FLU frame:
+
+| source | imu_x | imu_y | imu_z |
+|---|---|---|---|
+| `model.sdf` | right | forward | up |
+| depthai `TFPublisher` | up | left | back |
+
+The first row is the bench measurement at the top of this section, so the
+description is right and the driver is not. Translations agree to 0.000 mm; only
+the rotation is affected. Simulation's `oak_calibration_tf` publishes the six
+camera frames and deliberately not this one, for the same reason.
 
 ---
 
@@ -449,6 +583,7 @@ through TF, never by adding their vectors.
 | `/scan`, `/scan/points` | `LaserScan`, `PointCloud2` | LD19P |
 | `/oak/rgb/image_raw`, `/oak/rgb/camera_info` | `Image`, `CameraInfo` | colour, 1280x720 (`bgr8` on hardware, `rgb8` in simulation) |
 | `/oak/stereo/image_raw`, `/oak/stereo/camera_info` | `Image`, `CameraInfo` | depth, 1280x720 (`16UC1` mm on hardware, `32FC1` m in simulation) |
+| `/oak/left/image_raw`, `/oak/right/image_raw` (+ `camera_info`) | `Image`, `CameraInfo` | raw mono pair, 640x480 `mono8`, 74.75 mm baseline |
 | `/oak/points` | `PointCloud2` | depth cloud |
 | `/oak/imu/data` | `sensor_msgs/Imu` | camera BMI270 |
 | `/voltage` | `std_msgs/Float32` | battery voltage, not available in simulation |
@@ -989,7 +1124,8 @@ editing the generated copies on the robot, which the next deploy overwrites.
 | Softer command response | Serial round trip plus MCU PID, against Gazebo applying joint velocity immediately |
 | Depth encoding differs | Hardware publishes depth as `16UC1` millimetres, gz's depth camera emits `32FC1` metres. Nothing can reconcile this in the model; read the encoding field |
 | Colour channel order | Hardware `bgr8`, simulation `rgb8`. `cv_bridge` handles either, raw byte access does not |
-| No lens distortion | Hardware `camera_info` carries a `rational_polynomial` model with real coefficients; gz publishes `plumb_bob` with all zeros, and principal point exactly at centre (640.0/360.0 against the device's 642.9/373.8) |
+| No lens distortion | Hardware `camera_info` carries a `rational_polynomial` model with real coefficients; gz publishes `plumb_bob` with all zeros, and principal point exactly at centre - 640.0/360.0 against the device's 642.9/373.8 for colour, and 320.0/240.0 against 333.7/257.5 and 333.8/248.4 for the mono pair |
+| The mono pair's `camera_info` states a different baseline | The images are fine; `P[3]` is not. Hardware puts the whole baseline on the left camera, `-33.837`, and leaves the right at `0`. gz has no notion of a stereo pair and gives each camera `-fx * its own lateral offset in the link` - measured as `-17.089` and `-16.792`, exactly `-fx * pose y`. So a consumer reading simulation's left `camera_info` infers a 37.75 mm baseline where the truth is 74.75, and the right one disagrees with both. `stereo_image_proc` against the simulated pair is wrong rather than merely degraded; triangulate from TF, which is correct in both modes |
 | Depth noise does not grow with range | Real stereo error goes as z^2 (measured k = 3.33 mm/m^2); gz offers only a constant stddev, set to that k at a 3 m reference. Simulation is right at 3 m, pessimistic closer, optimistic further. Scale by `(z/3)^2` if it matters |
 | Depth never drops out | Gazebo returns a value for every pixel inside the clip range; the real camera fills about 59% and drops out on untextured surfaces, at range, and in the 75 mm baseline's occlusion band |
 | Lidar intensity is not physical | Gazebo does not model return strength, so simulation writes a constant on bins that returned something and `NaN` on bins that did not. The real device reports 7..255. The valid/blank structure matches, the magnitude does not - see "Matching the real LiDAR" |
@@ -1057,7 +1193,8 @@ These are harmless:
 
 * `XML Element[gz_frame_id] ... not defined in SDF` - a Gazebo extension that
   SDFormat does not recognise but Gazebo reads. It sets the `frame_id` on sensor
-  messages, and appears once per sensor per process that parses the model.
+  messages, and appears once per sensor per process that parses the model - so
+  the count grew when the mono pair was added.
 * `sdformat_urdf: link [...] has a <sensor>, but URDF does not support this` -
   cosmetic. Now emitted by the build rather than by `robot_state_publisher`,
   since the SDF-to-URDF conversion moved to build time; see "Why

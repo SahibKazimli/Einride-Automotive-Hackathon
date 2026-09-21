@@ -199,15 +199,41 @@ def generate_launch_description():
     # real camera's field of view match the simulated one - see "Matching the
     # real camera" in the README.
     #
-    # camera_as_part_of_a_robot.launch.py, not camera.launch.py: the former
-    # publishes no TF and no camera URDF, which is what a camera bolted to a
-    # robot that already has a description needs. camera.launch.py brings its own
-    # robot_state_publisher and its own oak_* frames, which would collide with
-    # the ones model.sdf already declares - two publishers, one frame, and a TF
-    # tree that flickers between them. Frame names are unaffected: the driver
-    # still stamps images oak_rgb_camera_optical_frame and IMU messages
-    # oak_imu_frame, and model.sdf declares exactly those, so simulation and
-    # hardware carry identical frame_ids on identical topics.
+    # camera_as_part_of_a_robot.launch.py, not camera.launch.py: the latter brings
+    # its own robot_state_publisher, which would fight the one common.launch.py
+    # already runs.
+    #
+    # WHO OWNS THE CAMERA'S FRAMES
+    # ----------------------------
+    # Split, deliberately. model.sdf owns where the camera BODY sits on the robot
+    # (oak_d_lite_link) and it owns oak_imu_frame. The device's own EEPROM
+    # calibration owns everything between its sensors - oak_{rgb,left,right}_camera_frame
+    # and their _camera_optical_frame children - published by the driver because
+    # oak_d_lite.yaml sets camera.i_publish_tf_from_calibration. A description
+    # cannot know which physical camera is bolted on; this one measures 74.75 mm
+    # between the mono pair where the nominal figure is 75.
+    #
+    # The two must not overlap. model.sdf therefore no longer declares
+    # oak_rgb_camera_optical_frame: while it did, and with this driver setting on,
+    # /tf_static carried that frame twice with different parents. tf2's static
+    # cache is keyed by child and simply overwrites, and the topic is latched, so
+    # which one a subscriber believes depends on arrival order - it does not warn
+    # and it is not deterministic.
+    #
+    # The graft is exact rather than approximate. The driver bolts the root of its
+    # socket chain to i_tf_base_frame with an identity transform, and on this
+    # device that root is the colour camera, which model.sdf already places at
+    # oak_d_lite_link's origin. Verified on the robot.
+    #
+    # i_tf_base_frame names a link called 'oak' rather than oak_d_lite_link, and
+    # that spelling is forced: the driver reuses the same parameter as the prefix
+    # for every image frame_id while naming published frames after the node, so
+    # anything but the node's own name splits the two apart. model.sdf carries an
+    # identity link for exactly this. See its comment, and oak_d_lite.yaml.
+    #
+    # Expect one puzzling log line: "Published URDF". The driver runs xacro and
+    # hands the result to a node called oak_state_publisher, which nothing here
+    # starts, so it goes nowhere. Harmless, and not worth chasing.
     camera = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution([
@@ -215,9 +241,13 @@ def generate_launch_description():
                 'camera_as_part_of_a_robot.launch.py'])),
         launch_arguments={
             'name': 'oak',
-            'params_file': os.path.join(
-                pkg_project_bringup, 'config', 'oak_d_lite.yaml'),
+            'params_file': LaunchConfiguration('camera_params'),
             'rectify_rgb': 'False',
+            # NOT publish_tf_from_calibration:=true, even though that is what this
+            # robot wants. That path hardcodes i_tf_base_frame to the camera name
+            # and appends its own dict AFTER params_file, so it would silently
+            # override the oak_d_lite_link the YAML asks for. Configuring through
+            # the params file and leaving this include alone is what makes it stick.
         }.items(),
         condition=IfCondition(use_camera),
     )
@@ -287,6 +317,11 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'camera', default_value='true',
             description='Start the OAK-D Lite driver.'),
+        DeclareLaunchArgument(
+            'camera_params',
+            default_value=PathJoinSubstitution(
+                [pkg_project_bringup, 'config', 'oak_d_lite.yaml']),
+            description='Parameter file for the OAK-D Lite driver.'),
         DeclareLaunchArgument(
             'hardware_params',
             default_value=PathJoinSubstitution(

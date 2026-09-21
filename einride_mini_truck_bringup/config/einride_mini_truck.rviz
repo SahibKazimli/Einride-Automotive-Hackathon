@@ -95,6 +95,22 @@ Visualization Manager:
         Depth: 5
         Durability Policy: Volatile
         Reliability Policy: Best Effort
+    - Class: rviz_default_plugins/Image
+      Name: OakLeft
+      Enabled: false
+      Topic:
+        Value: /oak/left/image_raw
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
+    - Class: rviz_default_plugins/Image
+      Name: OakRight
+      Enabled: false
+      Topic:
+        Value: /oak/right/image_raw
+        Depth: 5
+        Durability Policy: Volatile
+        Reliability Policy: Best Effort
   Tools:
     - Class: rviz_default_plugins/MoveCamera
   Views:

@@ -132,6 +132,12 @@ DRIVER_TOPICS = {
     '/bond', '/diagnostics',
     '/oak/rgb/image_raw', '/oak/rgb/camera_info',
     '/oak/stereo/image_raw', '/oak/stereo/camera_info',
+    # The raw OV7251 mono pair - the stereo input, not a view of the depth
+    # output. Simulation publishes these through the bridge, so they would
+    # otherwise trip test_no_unexpected_topic_in_either_mode on the sim side
+    # while the hardware side has the camera switched off.
+    '/oak/left/image_raw', '/oak/left/camera_info',
+    '/oak/right/image_raw', '/oak/right/camera_info',
     '/oak/points', '/oak/imu/data',
 }
 

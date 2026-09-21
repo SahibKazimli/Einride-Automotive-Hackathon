@@ -52,6 +52,65 @@
       # driver default of true asks a device with no such hardware to drive it.
       i_enable_ir: false
       i_nn_type: none
+      # TF for everything INSIDE the camera comes from the device's own EEPROM
+      # calibration, not from model.sdf. The description still owns where the
+      # camera body is mounted (oak_d_lite_link); the device owns the geometry
+      # between its own sensors, because only it knows which physical camera is
+      # bolted on. Measured on mxid 194430107146157E00: the mono baseline is
+      # 74.75 mm where the description's nominal figure was 75.
+      #
+      # This publishes six frames - oak_{rgb,left,right}_camera_frame and their
+      # _camera_optical_frame children - so model.sdf must NOT declare any of
+      # them. It did declare oak_rgb_camera_optical_frame; that link was removed
+      # in the same commit as this. Two publishers for one child frame is not an
+      # error anybody reports: tf2's static cache is keyed by child and simply
+      # overwrites, and /tf_static is latched, so which one a given subscriber
+      # believes depends on message arrival order.
+      i_publish_tf_from_calibration: true
+      # The frame the driver's socket chain hangs off. model.sdf declares a link
+      # of exactly this name, identity to oak_d_lite_link, purely to receive it.
+      #
+      # MUST BE SPELLED LIKE THE NODE, i.e. 'oak'. This parameter does double
+      # duty once the flag above is on: sensor_helpers.cpp::tfPrefix returns it
+      # as the prefix for every image frame_id, while TFPublisher names the
+      # frames it PUBLISHES after the node instead. Set this to oak_d_lite_link -
+      # which is geometrically the right answer and was tried on the robot - and
+      # the images come out stamped oak_d_lite_link_left_camera_optical_frame
+      # while TF carries oak_left_camera_optical_frame. Nothing warns; every
+      # image simply sits in a frame that does not exist.
+      #
+      # The attachment is exact rather than approximate. The socket whose
+      # extrinsics point nowhere (toCameraSocket == -1) is bolted to this frame
+      # with an identity transform, and on this device that socket is CAM_A, the
+      # colour camera - which model.sdf places at oak_d_lite_link's origin,
+      # rotated by exactly the -pi/2, 0, -pi/2 the driver hardcodes.
+      #
+      # If a future device roots its chain at CAM_B or CAM_C instead, this
+      # silently redefines the camera origin as that mono camera's centre and
+      # shifts the whole assembly ~37 mm. Re-check the dump's toCameraSocket
+      # fields rather than assuming; test_oak_calibration_tf.py asserts it.
+      i_tf_base_frame: oak
+      # Inert: it is only used for a URDF the driver hands to a node called
+      # oak_state_publisher, which this launch never starts. Stated honestly
+      # anyway rather than left at the stock 'oak-d-base-frame'.
+      i_tf_parent_frame: base_link
+      # A BUG WORKAROUND, not a preference - do not "tidy" this back to false.
+      #
+      # True means "the IMU frame comes from the description", which suppresses
+      # publishImuTransform entirely. It has to, because that function is wrong:
+      # quatFromRotM computes q_rot2rdf * q_extr * q_rot2rdf^-1, a similarity
+      # transform. That is right for camera-to-camera, where both frames are
+      # optical and both need re-basing, and wrong for camera-to-IMU, where the
+      # child is not an optical frame and only the left factor belongs. The
+      # result is off by exactly one q_rot2rdf, i.e. 2*acos(0.5) = 120 degrees.
+      #
+      # Measured on the device, expressing the IMU axes in the robot's FLU frame:
+      #   model.sdf   imu_x = right,  imu_y = forward,  imu_z = up
+      #   the driver  imu_x = up,     imu_y = left,     imu_z = back
+      # The first is what the README documents from the physical device, so
+      # model.sdf keeps oak_imu_frame and the driver stays out of it. Note the
+      # translations agree to 0.000 mm; only the rotation is affected.
+      i_tf_imu_from_descr: 'true'
     pipeline_gen:
       i_enable_imu: true          # see camera.i_enable_imu above
     rgb:
@@ -77,6 +136,16 @@
       i_width: 1280
       i_height: 720
       i_fps: 30.0
+    # The two OV7251 mono sensors that feed stereo depth. By default the driver
+    # only feeds them into StereoDepth and publishes neither on its own topic;
+    # i_publish_topic turns on /oak/left/image_raw and /oak/right/image_raw
+    # (plus their camera_info) so the raw monochrome pair is available directly,
+    # not just as depth input. Confirmed the correct key from this driver's own
+    # config/oak_d_sr.yaml, which sets the same flag under `right:`.
+    left:
+      i_publish_topic: true
+    right:
+      i_publish_topic: true
     stereo:
       i_resolution: 480P          # 640x480 OV7251 pair, 75 mm baseline
       # Depth is aligned to the colour camera, so the published depth image is
