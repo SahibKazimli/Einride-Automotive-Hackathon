@@ -61,7 +61,10 @@ header of `arena.sdf`.
 bay with a 100 mm tag36h11 AprilTag on the back wall, built to the geometry in
 `DOCK_PLAN.md`. Arriving at a dock's `dock_approach_pose` frame *is* the
 delivery - nothing is physically transferred. Dock A carries tag id 0 through to
-dock H with id 7, and each pylon's letter matches its tag.
+dock H with id 7, and each dock's letter decal matches its tag. The dock is
+three structural panels - middle (back wall), left wing, right wing - all
+350 mm tall; the letter lives on the back wall's own free zone (z 269-341)
+rather than on a separate pylon, so it costs no extra panel.
 
 **They are generated, not checked in eight times.** `dock_template/model.sdf.in`
 holds every dimension once and `CMakeLists.txt` configures it per dock from the
@@ -81,13 +84,14 @@ for each dock, alongside `letter_a.png` .. `letter_h.png`; CMake copies only
 the two a given dock references, so each generated model stays self-contained
 the way Gazebo expects.
 
-The dock's styling - stepped wing tops, the wordmark crown, the identity pylon,
-the dark accent band - all sits above z=200 mm, clear of the 80-180 mm scan band
-and of the tag. `DOCK_PLAN.md` section 3.3 states that envelope as a contract;
-check any new decoration against it, because the sensing behaviour of this model
-depends on those two bands staying plain. The `einride` wordmark in
-`materials/textures/wordmark.png` is a placeholder set in Nimbus Sans, not the
-real logotype - replace it in place at the same 400:60 aspect.
+The dock's two styling elements - the dark accent band (z 200-260) and the
+letter decal (z 269-341) - both sit clear of the 80-180 mm scan band and of
+the tag. `DOCK_PLAN.md` section 3.3 states that envelope as a contract; check
+any new decoration against it, because the sensing behaviour of this model
+depends on those two bands staying plain. `dock_template/textures/wordmark.png`
+is a leftover asset from an earlier revision that had a wordmark crown above
+the back wall; that panel no longer exists, so the texture is unused and safe
+to delete.
 
 
 ## Props, and why they are there

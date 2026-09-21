@@ -32,10 +32,10 @@
 
   All eight docks are geometrically identical - the trapezoidal bay is what
   distinguishes a dock from any other arena feature, not one dock from another.
-  Telling them apart is the tag's job, and the pylon letter is the same
-  information for a human. A scan matcher looking only at wall geometry can and
-  will confuse dock A with dock E; that is a property of the arena to design
-  around, not a bug in it.
+  Telling them apart is the tag's job, and the letter decal on the back wall is
+  the same information for a human. A scan matcher looking only at wall
+  geometry can and will confuse dock A with dock E; that is a property of the
+  arena to design around, not a bug in it.
 
   The models are generated - see einride_mini_truck_gazebo/CMakeLists.txt and
   dock_template/. DOCK_PLAN.md is the spec they are built to.
@@ -245,7 +245,7 @@
     </model>
 
     <!-- The eight docks. See the table at the top of this file. Each carries a
-         different tag36h11 id and a matching pylon letter, paired in
+         different tag36h11 id and a matching letter decal, paired in
          CMakeLists.txt so the two cannot drift apart. -->
     <include>
       <uri>model://warehouse_dock_a</uri>

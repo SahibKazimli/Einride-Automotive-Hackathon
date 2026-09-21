@@ -107,8 +107,8 @@ install(
 # model://warehouse_dock_a resolves with no change to the hooks.
 #
 # Each entry is "<letter> <tag id>". The letter is what a human reads off the
-# pylon and the id is what apriltag_ros reports; keeping them paired here is
-# what stops the two markings drifting apart.
+# dock's own letter decal and the id is what apriltag_ros reports; keeping
+# them paired here is what stops the two markings drifting apart.
 set(DOCK_ASSIGNMENTS "A 0" "B 1" "C 2" "D 3" "E 4" "F 5" "G 6" "H 7")
 
 foreach(assignment IN LISTS DOCK_ASSIGNMENTS)
@@ -132,7 +132,6 @@ foreach(assignment IN LISTS DOCK_ASSIGNMENTS)
   file(COPY
     "dock_template/textures/${DOCK_TAG_TEXTURE}"
     "dock_template/textures/${DOCK_LETTER_TEXTURE}"
-    "dock_template/textures/wordmark.png"
     DESTINATION "${dock_out}/materials/textures"
   )
 
