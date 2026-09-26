@@ -122,32 +122,30 @@ overwrites them.
 
 ## When every topic is listed but nothing arrives
 
-Fast DDS normally uses shared memory between processes on the same machine.
-**On the Jetson, shared memory does not work, and fails silently.** Topics still
-show up in `ros2 topic list`, Foxglove lists them, and `ros2 node list` looks
-normal - but no messages get through.
-
-So `/etc/default/einride-mini-truck` sets:
+Fast DDS uses shared memory between processes on the same machine.
+`/etc/default/einride-mini-truck` sets:
 
 ```
-FASTDDS_BUILTIN_TRANSPORTS=UDPv4
+FASTDDS_BUILTIN_TRANSPORTS=DEFAULT
 ```
 
-With the default transport, `/tf_static` and the lidar both deliver **0**
-messages on the robot. With `UDPv4`, they arrive normally. UDP uses more CPU for
-large messages such as camera images. If that becomes a problem, use
-`LARGE_DATA` (TCP for data) rather than going back to the default.
+**If shared memory fails, it fails silently.** Topics still show up in
+`ros2 topic list`, Foxglove lists them, and `ros2 node list` looks normal - but
+no messages get through. Processes running as different users may not be able
+to share memory, so run `ros2` commands on the robot as the service user.
 
-Both service wrappers also run `fastdds shm clean` before starting, to remove
-leftover shared memory from crashed processes. That alone does not fix the
-problem.
+Both service wrappers run `fastdds shm clean` before starting, to remove
+leftover shared memory from crashed processes.
+
+If messages still do not arrive, set `FASTDDS_BUILTIN_TRANSPORTS=UDPv4` in
+`/etc/default/einride-mini-truck` and restart the service. All data then goes
+over UDP, which uses more CPU for large messages such as camera images.
 
 **How to tell a transport problem from a sensor problem:** subscribe to
 `/tf_static`. `robot_state_publisher` publishes it once at startup and keeps it
 available, so it must arrive right away. If it does not, the problem is the
-transport, not the sensors. Remember to set the same transport in your own
-shell:
+transport, not the sensors:
 
 ```bash
-FASTDDS_BUILTIN_TRANSPORTS=UDPv4 ros2 topic echo /tf_static
+ros2 topic echo /tf_static
 ```
