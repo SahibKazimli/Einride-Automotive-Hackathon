@@ -1,0 +1,66 @@
+---
+# depthai_ros_driver parameters for the OAK-D Lite: RGB + left + right raw,
+# no depth. Used by hardware.launch.py when camera_config:=rgbstereo.
+#
+# THE RGBD/RGBSTEREO SPLIT
+# -------------------------
+# Sibling of oak_d_lite.yaml (camera_config:=rgbd, the default). They exist
+# because the OAK-D Lite's XLink link cannot carry the full RGB + left + right
+# + depth + IMU set at once: with all four camera streams enabled, the IMU's
+# device-side queue is starved indefinitely and /oak/imu/data is silent - not
+# a race, reproducible every time. See OAK_IMU_INVESTIGATION.md, "Root cause:
+# IMU starved by the full RGBD pipeline".
+#
+# This file uses i_pipeline_type: RGBStereo, which builds RGB plus the raw
+# left/right mono cameras and NO StereoDepth node at all - not "depth
+# disabled", but no depth computation on the device, no /oak/stereo/*, no
+# /oak/points. oak_d_lite.yaml instead keeps depth and drops left/right raw.
+# The IMU works in both; RGB works in both; depth and raw left/right do not
+# coexist with the IMU on this device.
+#
+# Values mirrored from oak_d_lite.yaml where they apply identically
+# (resolution, TF ownership, IMU rate); see that file's comments for the full
+# reasoning. Only what differs because there is no StereoDepth node here is
+# commented separately below.
+/oak:
+  ros__parameters:
+    camera:
+      # See oak_d_lite.yaml's comment on i_enable_imu for the build-dependent
+      # camera./pipeline_gen. key split. Set under both here too.
+      i_enable_imu: true
+      i_pipeline_type: RGBStereo
+      i_enable_ir: false
+      i_nn_type: none
+      i_publish_tf_from_calibration: true
+      i_tf_base_frame: oak
+      i_tf_parent_frame: base_link
+      i_tf_imu_from_descr: 'true'
+    pipeline_gen:
+      i_enable_imu: true          # see camera.i_enable_imu above
+    rgb:
+      # Same sensor mode as oak_d_lite.yaml, for the same reasons - see that
+      # file's "WHY 1280x720 AND NOT 1052x780" comment. The multiple-of-16
+      # constraint that forces this choice is specific to depth alignment, and
+      # this pipeline has no depth - but there is no reason for the two
+      # configs' RGB output to differ, and keeping them identical is one less
+      # thing to compare when switching between them.
+      i_resolution: 1080P
+      i_width: 1280
+      i_height: 720
+      i_fps: 30.0
+    # The two OV7251 mono sensors. i_publish_topic is turned ON here - this is
+    # the whole point of this config, unlike oak_d_lite.yaml, which leaves it
+    # at the driver's default (false). There is no stereo: block: i_pipeline_type
+    # RGBStereo builds no StereoDepth node, so any stereo.* parameter here
+    # would be declared for a node that does not exist and silently do
+    # nothing - better to omit it than leave dead configuration to find later.
+    left:
+      i_publish_topic: true
+    right:
+      i_publish_topic: true
+    imu:
+      # Matches oak_d_lite.yaml - see that file's comment on the device's
+      # ~250 Hz ceiling for the merged accel+gyro stream.
+      i_acc_freq: 100
+      i_gyro_freq: 100
+      i_message_type: IMU

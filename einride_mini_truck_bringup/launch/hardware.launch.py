@@ -40,7 +40,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
@@ -199,6 +199,18 @@ def generate_launch_description():
     # real camera's field of view match the simulated one - see "Matching the
     # real camera" in the README.
     #
+    # camera_config PICKS THE PARAMS FILE, NOT JUST A RESOLUTION
+    # ------------------------------------------------------------
+    # The device's XLink link cannot carry RGB + left + right + depth + IMU all
+    # at once - the full set starves the IMU's queue indefinitely, every time.
+    # See OAK_IMU_INVESTIGATION.md, "Root cause: IMU starved by the full RGBD
+    # pipeline". camera_config therefore selects between two mutually exclusive
+    # params files, not a parameter within one:
+    #   rgbd (default)  -> oak_d_lite.yaml            RGB + depth, no left/right raw
+    #   rgbstereo       -> oak_d_lite_rgbstereo.yaml   RGB + left/right raw, no depth
+    # The IMU streams in both. Pass camera_params directly to override with a
+    # third file entirely; camera_config only changes camera_params' default.
+    #
     # camera_as_part_of_a_robot.launch.py, not camera.launch.py: the latter brings
     # its own robot_state_publisher, which would fight the one common.launch.py
     # already runs.
@@ -318,10 +330,25 @@ def generate_launch_description():
             'camera', default_value='true',
             description='Start the OAK-D Lite driver.'),
         DeclareLaunchArgument(
+            'camera_config', default_value='rgbd',
+            description="Which camera_params default to use: 'rgbd' (RGB + "
+                        "depth, no left/right raw; default) or 'rgbstereo' "
+                        '(RGB + left/right raw, no depth). The IMU works in '
+                        'both - see OAK_IMU_INVESTIGATION.md for why they '
+                        'cannot both be true at once. Ignored if camera_params '
+                        'is also passed explicitly.'),
+        DeclareLaunchArgument(
             'camera_params',
-            default_value=PathJoinSubstitution(
-                [pkg_project_bringup, 'config', 'oak_d_lite.yaml']),
-            description='Parameter file for the OAK-D Lite driver.'),
+            default_value=PathJoinSubstitution([
+                pkg_project_bringup, 'config',
+                PythonExpression([
+                    "'oak_d_lite_rgbstereo.yaml' if '",
+                    LaunchConfiguration('camera_config'),
+                    "' == 'rgbstereo' else 'oak_d_lite.yaml'",
+                ]),
+            ]),
+            description='Parameter file for the OAK-D Lite driver. Overrides '
+                        'camera_config when set explicitly.'),
         DeclareLaunchArgument(
             'hardware_params',
             default_value=PathJoinSubstitution(

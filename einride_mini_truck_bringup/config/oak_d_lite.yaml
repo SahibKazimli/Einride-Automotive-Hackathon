@@ -1,6 +1,24 @@
 ---
 # depthai_ros_driver parameters for the OAK-D Lite, set so the real camera
-# matches the simulated one. Used by hardware.launch.py.
+# matches the simulated one. Used by hardware.launch.py, selected by default
+# (camera_config:=rgbd) or explicitly.
+#
+# THE RGBD/RGBSTEREO SPLIT
+# -------------------------
+# This is one of two sibling configs; the other is oak_d_lite_rgbstereo.yaml
+# (camera_config:=rgbstereo). They exist because the OAK-D Lite's XLink link
+# cannot carry the full RGB + left + right + depth + IMU set at once: with all
+# four camera streams enabled, the IMU's device-side queue is starved
+# indefinitely and /oak/imu/data is silent - not a race, not a timing issue,
+# reproducible every time. See OAK_IMU_INVESTIGATION.md, "Root cause: IMU
+# starved by the full RGBD pipeline".
+#
+# This file is RGB + depth (i_pipeline_type: RGBD) with left/right raw
+# publishing turned OFF - that frees enough bandwidth for the IMU to stream
+# normally alongside RGB and depth. oak_d_lite_rgbstereo.yaml instead keeps
+# left/right raw and drops depth. Pick whichever pair of streams the task
+# needs; the IMU works in both, RGB works in both, but depth and raw
+# left/right are mutually exclusive on this device.
 #
 # Every value here was verified against the physical camera; see "Matching the
 # real camera" in the project README for the measurements.
@@ -48,6 +66,10 @@
       # silent no-op and the IMU runs only because pipeline_gen defaults to
       # true, so this is insurance against that default changing.
       i_enable_imu: true
+      # RGB + depth, no left/right raw. Stated explicitly even though it is
+      # this pipeline generator's own default - see the header comment above
+      # for why this and oak_d_lite_rgbstereo.yaml cannot both be true at once.
+      i_pipeline_type: RGBD
       # The OAK-D Lite has no IR dot projector and no floodlight. Leaving the
       # driver default of true asks a device with no such hardware to drive it.
       i_enable_ir: false
@@ -136,16 +158,19 @@
       i_width: 1280
       i_height: 720
       i_fps: 30.0
-    # The two OV7251 mono sensors that feed stereo depth. By default the driver
-    # only feeds them into StereoDepth and publishes neither on its own topic;
-    # i_publish_topic turns on /oak/left/image_raw and /oak/right/image_raw
-    # (plus their camera_info) so the raw monochrome pair is available directly,
-    # not just as depth input. Confirmed the correct key from this driver's own
-    # config/oak_d_sr.yaml, which sets the same flag under `right:`.
+    # The two OV7251 mono sensors that feed stereo depth. i_publish_topic is
+    # left at the driver's own default (false) here - NOT set to true, unlike
+    # oak_d_lite_rgbstereo.yaml. Confirmed on the robot: with i_pipeline_type
+    # RGBD, publishing /oak/left/image_raw and /oak/right/image_raw alongside
+    # RGB and depth is exactly what starves the IMU's XLink queue. Dropping
+    # these two raw streams - not the depth stream, which is what a first guess
+    # would suspect - is what makes /oak/imu/data flow again. StereoDepth still
+    # gets both mono feeds directly on-device either way; only the extra raw
+    # publish is removed. See OAK_IMU_INVESTIGATION.md.
     left:
-      i_publish_topic: true
+      i_publish_topic: false
     right:
-      i_publish_topic: true
+      i_publish_topic: false
     stereo:
       i_resolution: 480P          # 640x480 OV7251 pair, 75 mm baseline
       # Depth is aligned to the colour camera, so the published depth image is
