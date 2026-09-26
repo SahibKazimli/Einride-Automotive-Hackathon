@@ -72,8 +72,16 @@ WORKSPACE="$(cd -- "$SCRIPT_DIR/../../../.." && pwd)"
 
 # Built on the robot: the only package the robot runs that has compiled code.
 # Not a released ROS package, so there is no arm64 binary of it anywhere to
-# install instead - see "The LiDAR driver" in the README.
+# install instead. Cloned fresh from upstream on every provision, pinned to a
+# commit so LIDAR_PATCH is known to apply.
+#
+# The patch installs the vendor SDK (libldlidar.so) next to the component.
+# Upstream installs only the component, so it fails to load with "libldlidar.so:
+# cannot open shared object file". See the comment inside the patch.
 LIDAR_SRC="ldrobot-lidar-ros2"
+LIDAR_REPO="https://github.com/Myzhar/ldrobot-lidar-ros2.git"
+LIDAR_COMMIT="4ee53a8b176037cf418a54b25007075bb2b1d3a0"
+LIDAR_PATCH="$SCRIPT_DIR/patches/ldlidar_install_sdk.patch"
 
 # Built here and copied. Only the description: it holds no compiled code, so
 # where it was built does not matter, and it changes about as often as the robot
@@ -194,16 +202,7 @@ fi
 # ---------------------------------------------------------------------------
 # preflight
 # ---------------------------------------------------------------------------
-[ -d "$WORKSPACE/src/$LIDAR_SRC" ] || die \
-"no $WORKSPACE/src/$LIDAR_SRC.
-
-The lidar driver is built from source on the robot, so its source has to be here
-first. It lives beside this repository in the workspace:
-
-    cd $WORKSPACE/src
-    git clone --recursive https://github.com/Myzhar/ldrobot-lidar-ros2.git
-
---recursive matters: the vendor SDK is a submodule."
+[ -r "$LIDAR_PATCH" ] || die "no lidar patch at $LIDAR_PATCH"
 
 note "inspecting $ROBOT_IP"
 inspect_target
@@ -256,18 +255,25 @@ note "building ${MANIFEST_PACKAGES[*]}"
 # stage
 # ---------------------------------------------------------------------------
 stage="$(mktemp -d)"
-trap 'rm -rf "$stage"' EXIT
+lidar_clone="$(mktemp -d)"
+trap 'rm -rf "$stage" "$lidar_clone"' EXIT
 
 mkdir -p "$stage/udev" "$stage/packages" "$stage/manifests"
 cp "$UDEV_DIR"/*.rules "$stage/udev/"
 
-# The lidar goes over as source, to be compiled there. build/ and install/ are
-# stripped: a host build directory would hand CMake a cache full of this
-# machine's paths and its own architecture.
-rsync -a --delete \
-    --exclude='.git/' --exclude='build/' --exclude='install/' --exclude='log/' \
-    --exclude='__pycache__/' \
-    "$WORKSPACE/src/$LIDAR_SRC/" "$stage/lidar_src/"
+# The lidar goes over as source, to be compiled there. Cloned outside the stage
+# so that only the patched source, without .git, is shipped. The submodule is
+# the vendor SDK; its commit is pinned by LIDAR_COMMIT.
+note "fetching $LIDAR_SRC at ${LIDAR_COMMIT:0:7}"
+git clone --quiet "$LIDAR_REPO" "$lidar_clone" \
+    || die "could not clone $LIDAR_REPO"
+git -C "$lidar_clone" checkout --quiet "$LIDAR_COMMIT" \
+    || die "$LIDAR_REPO has no commit $LIDAR_COMMIT"
+git -C "$lidar_clone" submodule update --quiet --init --recursive \
+    || die "could not fetch the submodules of $LIDAR_SRC"
+git -C "$lidar_clone" apply "$LIDAR_PATCH" \
+    || die "$LIDAR_PATCH does not apply to $LIDAR_SRC at $LIDAR_COMMIT"
+rsync -a --exclude='.git' "$lidar_clone/" "$stage/lidar_src/"
 
 compiled=""
 for pkg in "${HOST_PACKAGES[@]}"; do

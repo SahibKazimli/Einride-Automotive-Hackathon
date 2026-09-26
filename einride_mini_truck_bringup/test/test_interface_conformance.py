@@ -103,7 +103,8 @@ DEFERRED_TOPICS = {
 # /scan/raw is simulation-only by construction: it is the bridge's raw gz scan,
 # and ld19_scan_model consumes it and publishes the /scan that both modes share.
 # The robot's driver produces a finished scan directly, so it has no equivalent
-# and should not grow one. See "Matching the real LiDAR" in the README.
+# and should not grow one. See "Simulation matches the real LiDAR" in
+# docs/lidar.md.
 SIM_ONLY_TOPICS = {'/clock', '/scan/raw'}
 
 # Hardware-only. Harmless; a battery model in the simulation would close it.

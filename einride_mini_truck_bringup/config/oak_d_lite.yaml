@@ -20,8 +20,8 @@
 # needs; the IMU works in both, RGB works in both, but depth and raw
 # left/right are mutually exclusive on this device.
 #
-# Every value here was verified against the physical camera; see "Matching the
-# real camera" in the project README for the measurements.
+# Every value here was verified against the physical camera; see
+# docs/camera.md for the measurements.
 #
 # WHY 1280x720 AND NOT 1052x780
 # -----------------------------
@@ -129,7 +129,7 @@
       # Measured on the device, expressing the IMU axes in the robot's FLU frame:
       #   model.sdf   imu_x = right,  imu_y = forward,  imu_z = up
       #   the driver  imu_x = up,     imu_y = left,     imu_z = back
-      # The first is what the README documents from the physical device, so
+      # The first is what docs/imu.md documents from the physical device, so
       # model.sdf keeps oak_imu_frame and the driver stays out of it. Note the
       # translations agree to 0.000 mm; only the rotation is affected.
       i_tf_imu_from_descr: 'true'

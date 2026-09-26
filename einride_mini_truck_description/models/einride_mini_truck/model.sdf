@@ -632,8 +632,8 @@
            reproduce the rest of what these streams carry: no rational_polynomial
            distortion, principal point exactly at centre, and - the one that bites
            - each camera_info comes out with P[3] = 0, because gz has no notion of
-           a stereo pair. See "Differences between hardware and simulation" in the
-           README before pointing stereo_image_proc at these. -->
+           a stereo pair. See docs/sim-vs-hardware.md before pointing
+           stereo_image_proc at these. -->
       <sensor name='oak_left' type='camera'>
         <pose>-0.000709634 0.037752367 0.000232973 0.012028577 0.011845125 0.006326987</pose>
         <always_on>1</always_on>
@@ -733,7 +733,7 @@
          not optical and where only the left factor belongs. The result is off by
          exactly one q_rot2rdf - 2*acos(0.5), or 120 degrees. Measured on the
          device, in robot FLU axes: this file gives imu_x = right, imu_y = forward,
-         imu_z = up, matching the README's bench measurement, where the driver
+         imu_z = up, matching the bench measurement in docs/imu.md, where the driver
          gives up / left / back. Translations agree to 0.000 mm. So
          oak_d_lite.yaml sets camera.i_tf_imu_from_descr true, which suppresses
          publishImuTransform entirely, and this link stays.
@@ -774,8 +774,7 @@
            stating because the OAK-D Lite is widely documented as having no IMU:
            dai::Device::getConnectedIMU() returns "BMI270" (firmware 1.0.0), the
            device streams accelerometer and gyroscope packets, and the factory
-           EEPROM carries IMU-to-colour-camera extrinsics. See the camera section
-           of the project README.
+           EEPROM carries IMU-to-colour-camera extrinsics. See docs/imu.md.
 
            Noise figures are MEASURED on this unit, not derived from the datasheet.
            2002 samples at 100 Hz with the camera at rest gave per-axis stddevs of
@@ -841,7 +840,7 @@
            reused as close enough.
 
            Every number below is matched against the real device on /scan - see
-           "Matching the real LiDAR" in the bringup README. The LD19 datasheet
+           "Simulation matches the real LiDAR" in docs/lidar.md. The LD19 datasheet
            gives 4500 pts/s fixed sampling and a 5/10/13 Hz spin rate, so the
            points per revolution are a consequence of the spin rate rather than a
            setting: the unit on this bench spins at 9.89 Hz, which is 4500/9.89 =

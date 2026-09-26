@@ -3,8 +3,8 @@
 # ownership is what stops it - `lsusb` shows the device and the driver reports
 # finding none. 03e7 is Movidius, the Myriad X inside the camera.
 #
-# Matches the rule documented in "Running on real hardware" in the README, and
-# the one the depthai installer writes. 0666 rather than a group is what the
+# Installed by provision.sh (see docs/robot-service.md). Matches the rule the
+# depthai installer writes. 0666 rather than a group is what the
 # vendor specifies: the device re-enumerates with a different product ID as it
 # boots its firmware, so a rule narrow enough to carry a group reliably would
 # have to match both identities.

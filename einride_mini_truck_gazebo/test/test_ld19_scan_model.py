@@ -17,7 +17,7 @@
 The numbers asserted here were read off the real LD19 on /ldlidar_node/scan,
 not taken from the datasheet, so this test fails if the transform stops
 reproducing what the hardware actually sends. Measuring the live device is
-described under "Matching the real LiDAR" in the bringup README.
+described under "Simulation matches the real LiDAR" in docs/lidar.md.
 """
 
 import math

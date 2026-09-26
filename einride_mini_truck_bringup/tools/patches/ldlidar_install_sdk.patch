@@ -1,0 +1,27 @@
+diff --git a/ldlidar_component/CMakeLists.txt b/ldlidar_component/CMakeLists.txt
+index 763bde8..2b7cd7a 100644
+--- a/ldlidar_component/CMakeLists.txt
++++ b/ldlidar_component/CMakeLists.txt
+@@ -199,7 +199,21 @@ rclcpp_components_register_nodes(${PROJECT_NAME} "ldlidar::LdLidarComponent")
+ set(node_plugins "${node_plugins}ldlidar::LdLidarComponent;$<TARGET_FILE:${PROJECT_NAME}>\n")
+ 
+ # Install components
+-install(TARGETS ${PROJECT_NAME}
++#
++# 'ldlidar' - the vendor SDK, built as a SHARED library above - is installed
++# alongside the component deliberately. Upstream installs only ${PROJECT_NAME},
++# which leaves the installed libldlidar_component.so with an unresolvable
++# dependency on libldlidar.so: the container's dlopen fails with
++# "libldlidar.so: cannot open shared object file", the component never loads,
++# and the only visible symptom is a lifecycle manager repeating
++# "Waiting for service ldlidar_node/get_state...".
++#
++# It can appear to work without this. If CMake happens to keep the build-tree
++# RUNPATH on the installed library, the SDK resolves out of build/ - so the
++# driver runs until someone deletes the build directory or copies install/ to
++# the robot, and then stops. ament puts <prefix>/lib on LD_LIBRARY_PATH, so
++# installing it there is what actually makes the install tree self-contained.
++install(TARGETS ${PROJECT_NAME} ldlidar
+   ARCHIVE DESTINATION lib
+   LIBRARY DESTINATION lib
+   RUNTIME DESTINATION lib/${PROJECT_NAME}

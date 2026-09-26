@@ -26,8 +26,9 @@
        exec-only and every one of them can be switched off with a launch
        argument. -->
   <exec_depend>einride_mini_truck_hardware</exec_depend>
-  <!-- LD19P lidar. Not a released ROS package: build ldrobot-lidar-ros2 from
-       source into the workspace - see "The LiDAR driver" in the README. rosdep
+  <!-- LD19P lidar. Not a released ROS package: provision.sh builds
+       ldrobot-lidar-ros2 from source on the robot - see docs/robot-service.md
+       and "The lidar driver" in docs/lidar.md. rosdep
        will warn that it cannot resolve this key, which the README's -r flag
        turns into a warning rather than a failure.
 
@@ -45,8 +46,8 @@
   <!-- OAK-D Lite. This key resolves to ros-jazzy-depthai-ros-driver, the v2
        driver, and it must stay that way: the v3 package
        (ros-jazzy-depthai-ros-driver-v3) crashes this camera's firmware the
-       moment either mono sensor starts. See "Which depthai stack" in the
-       README. The two install side by side, so v3 being present is fine. -->
+       moment either mono sensor starts. See "Which depthai driver" in
+       docs/camera.md. The two install side by side, so v3 being present is fine. -->
   <exec_depend>depthai_ros_driver</exec_depend>
   <!-- derives /scan/points from /scan in both modes: neither the LD19 driver nor
        ld19_scan_model emits a cloud, and building it the same way on both sides

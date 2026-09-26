@@ -196,8 +196,8 @@ def generate_launch_description():
     )
 
     # OAK-D Lite. The resolution parameters in oak_d_lite.yaml are what make the
-    # real camera's field of view match the simulated one - see "Matching the
-    # real camera" in the README.
+    # real camera's field of view match the simulated one - see "Camera
+    # settings" in docs/camera.md.
     #
     # camera_config PICKS THE PARAMS FILE, NOT JUST A RESOLUTION
     # ------------------------------------------------------------
