@@ -18,8 +18,7 @@
     segments and can fix x, y and yaw. A dark accent band wraps the inner
     faces at z 200-260, and the back wall carries a letter decal (matching
     the tag id) at z 269-341 - both clear of the frozen 80-180 mm scan band
-    and of the tag; see DOCK_PLAN.md 3.3. Geometry is specified in
-    DOCK_PLAN.md; the dock_approach_pose frame gives the docked pose of the
+    and of the tag. The dock_approach_pose frame gives the docked pose of the
     rover's base_footprint.
   </description>
 </model>

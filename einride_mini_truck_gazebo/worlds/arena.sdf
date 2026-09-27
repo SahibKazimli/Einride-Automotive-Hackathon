@@ -37,9 +37,6 @@
   geometry can and will confuse dock A with dock E; that is a property of the
   arena to design around, not a bug in it.
 
-  The models are generated - see einride_mini_truck_gazebo/CMakeLists.txt and
-  dock_template/. DOCK_PLAN.md is the spec they are built to.
-
   PROP LAYOUT
 
   The dock ring above is exactly D4-symmetric - 4-fold rotation plus both mirrors,

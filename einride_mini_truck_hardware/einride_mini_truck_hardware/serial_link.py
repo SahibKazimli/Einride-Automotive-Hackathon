@@ -28,7 +28,7 @@ FEEDBACK_TYPE = 1001
 CMD_VELOCITY_TYPE = 13
 
 # Raw-LSB -> SI scale factors, from the ICM-20948 datasheet ranges the firmware
-# configures. Documented in HARDWARE_HAL_PLAN.md, "Verified serial protocol".
+# configures.
 ACCEL_SCALE = 9.80665 / 8192.0            # 8192 LSB/g at +/-4 g -> m/s^2
 GYRO_SCALE = math.pi / (16.4 * 180.0)     # 16.4 LSB/deg/s at +/-2000 dps -> rad/s
 MAG_SCALE = 0.15 * 1e-6                   # AK09916 0.15 uT/LSB -> Tesla

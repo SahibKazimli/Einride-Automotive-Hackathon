@@ -371,7 +371,7 @@ class Ugv02SerialNode(Node):
         line's own transmission time recovers the bulk of it. What is left -
         UART FIFO and scheduler latency, and any bytes that arrived in the same
         read after this line - goes into ``stamp_offset``, which stays 0 until
-        it is measured on the robot (HARDWARE_HAL_PLAN.md, phase 5).
+        it is measured on the robot.
         """
         offset_s = self._stamp_offset
         if self._compensate_transmission and self._baud > 0:

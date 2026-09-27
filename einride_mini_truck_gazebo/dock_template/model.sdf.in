@@ -9,7 +9,6 @@
 
   This is the delivery target the rover drives into.
 
-  Built to DOCK_PLAN.md, which is the single source of truth for the geometry.
   All numbers there are millimetres; SDF is metres, so every dimension below is
   that value divided by 1000.
 
@@ -58,9 +57,7 @@
                              clearance between the plate's top edge and the
                              accent band's bottom edge.
     inward protrusions
-    below z=180              FORBIDDEN. Occlusion or shadow on the tag, and
-                             DOCK_PLAN.md 7.2 already bans anything standing in
-                             the bay footprint.
+    below z=180              FORBIDDEN. Occlusion or shadow on the tag.
     inner faces, z 200..350  Free - texture and geometry. No legal scan height
                              reaches it. Panels top out at z=350, so this is
                              also the top of the model.
@@ -85,11 +82,7 @@
       <!-- ============================ walls ============================ -->
 
       <!-- Back wall: 8 x 400 x 350, inner face at x=0, spans y -200..+200.
-           Deliberately left as one monolithic panel. DOCK_PLAN.md 7.3 holds it
-           to +-1.0 mm flatness over its 400 mm because that error lands
-           directly in the tag pose, and a horizontal joint here would be the
-           easiest way to lose that. The accent band is applied over it rather
-           than built into it for the same reason. -->
+           Deliberately left as one monolithic panel. -->
       <visual name="back_wall_visual">
         <pose>-0.004 0 0.175 0 0 0</pose>
         <geometry><box><size>0.008 0.400 0.350</size></box></geometry>
@@ -294,8 +287,7 @@
            No collision with the letter decal above: plate top at z=192.5 mm,
            letter bottom at z=269 mm (see "letter" above) - 76.5 mm clear.
 
-           This dock carries id @DOCK_TAG_ID@. See the dock table in
-           DOCK_PLAN.md 3.4 for the full letter/id/pose assignment. -->
+           This dock carries id @DOCK_TAG_ID@. -->
       <visual name="apriltag_visual">
         <pose>0.0005 0 0.130 0 0 0</pose>
         <geometry><box><size>0.001 0.125 0.125</size></box></geometry>

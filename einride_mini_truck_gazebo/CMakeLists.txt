@@ -95,12 +95,12 @@ install(
 )
 
 
-# The eight warehouse docks are generated from one template rather than
-# checked in eight times over. dock_template/model.sdf.in holds every
-# dimension once - see DOCK_PLAN.md, which is the spec it is built to - and the
-# docks differ only in their two identity textures and their name. Copying the
-# file eight times would mean eight places to miss when a number changes, and
-# the numbers in it are load-bearing for both the LiDAR and the tag.
+# The eight warehouse docks are generated from one template rather than checked
+# in eight times over. dock_template/model.sdf.in holds every dimension once
+# and the docks differ only in their two identity textures and their name.
+# Copying the file eight times would mean eight places to miss when a number
+# changes, and the numbers in it are load-bearing for both the LiDAR and the
+# tag.
 #
 # Generated models land in the worlds/ install tree on purpose: the environment
 # hook already exports share/${PROJECT_NAME}/worlds on GZ_SIM_RESOURCE_PATH, so

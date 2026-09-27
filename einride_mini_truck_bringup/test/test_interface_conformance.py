@@ -89,14 +89,6 @@ SHARED_TOPICS = {
 # name, type and QoS are asserted here, which is this file's whole scope.
 JOINT_STATES_TOPIC = {'/joint_states': 'sensor_msgs/msg/JointState'}
 
-# Deferred to the wheel-odometry phase. Present in simulation, absent on
-# hardware, and expected to stay that way until that phase lands. See
-# HARDWARE_HAL_PLAN.md, "Deferred to a later phase".
-DEFERRED_TOPICS = {
-    '/odom': 'nav_msgs/msg/Odometry',
-    '/joint_states_raw': 'sensor_msgs/msg/JointState',
-}
-
 # Simulation-only. /clock is unfixable - a real robot has no simulated clock, and
 # every node's use_sim_time flips because of this one topic.
 #
@@ -303,7 +295,7 @@ def graphs():
         simulation = _launch(
             ['simulation.launch.py', 'headless:=true', 'rviz:=false'],
             (set(HAL_TOPICS) | set(SHARED_TOPICS) | set(JOINT_STATES_TOPIC)
-             | set(DEFERRED_TOPICS) | SIM_ONLY_TOPICS),
+             | SIM_ONLY_TOPICS),
             SIM_STARTUP_TIMEOUT)
         hardware = _launch(
             # Both drivers are switched off - see DRIVER_TOPICS. The serial port
@@ -394,21 +386,6 @@ def test_joint_states_is_published_in_both_modes(graphs):
 
 # ---------------------------------------------------------- documented gaps
 
-@pytest.mark.parametrize('topic', sorted(DEFERRED_TOPICS))
-def test_deferred_topics_are_missing_on_hardware(graphs, topic):
-    """Not a bug: wheel odometry is a later phase.
-
-    Asserting the gap rather than ignoring it means this test starts failing
-    the moment odometry lands, which is the prompt to move these into the
-    contract above.
-    """
-    simulation, hardware = graphs
-    assert simulation.publishers.get(topic) == DEFERRED_TOPICS[topic]
-    assert topic not in hardware.publishers, (
-        '{} is now published on hardware - move it out of DEFERRED_TOPICS'
-        .format(topic))
-
-
 def test_clock_is_simulation_only(graphs):
     """The single most likely cause of "works in sim, stalls on hardware".
 
@@ -456,7 +433,7 @@ def test_no_unexpected_topic_in_either_mode(graphs):
     """Catches drift in the direction the explicit lists cannot: new topics."""
     simulation, hardware = graphs
     known = (set(HAL_TOPICS) | set(SHARED_TOPICS) | set(JOINT_STATES_TOPIC)
-             | set(DEFERRED_TOPICS) | SIM_ONLY_TOPICS | HARDWARE_ONLY_TOPICS
+             | SIM_ONLY_TOPICS | HARDWARE_ONLY_TOPICS
              | DRIVER_TOPICS | {'/tf', '/parameter_events', '/rosout'})
     assert simulation.topics - known == set()
     assert hardware.topics - known == set()
