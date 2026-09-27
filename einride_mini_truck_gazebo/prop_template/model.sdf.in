@@ -4,8 +4,8 @@
 
   GENERATED FILE - do not edit. The source is prop_template/model.sdf.in plus the
   one scale table in props/props.cmake. The mesh and textures under meshes/ and
-  materials/ are UPSTREAM AND BYTE-FOR-BYTE UNMODIFIED (props/MANIFEST.sha256);
-  props/README.md carries provenance and the CC0-1.0 licence, and
+  materials/ are UPSTREAM AND BYTE-FOR-BYTE UNMODIFIED (props/MANIFEST.sha256
+  carries provenance and the CC0-1.0 licence is in props/LICENSE.CC0), and
   props/@PROP_DIR@/AABB.md records the measured bounds this scale was chosen
   against.
 

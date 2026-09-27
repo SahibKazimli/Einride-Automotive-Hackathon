@@ -13,7 +13,7 @@
     Arena prop @PROP_DIR@, scaled @PROP_SCALE@ for the einride-mini-truck arena.
     GENERATED from prop_template/model.config.in - do not edit.
     Mesh and textures are upstream and unmodified (CC0-1.0); the SDF is ours.
-    See props/README.md for provenance and props/@PROP_DIR@/AABB.md for the
-    measured bounds behind the scale.
+    See props/MANIFEST.sha256 for provenance and props/@PROP_DIR@/AABB.md for
+    the measured bounds behind the scale.
   </description>
 </model>

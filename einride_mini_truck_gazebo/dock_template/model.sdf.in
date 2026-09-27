@@ -32,16 +32,12 @@
   harmless. Every panel is solid from the floor up - a panel on legs would let
   the LiDAR scan plane pass under it and see two thin posts instead of a wall.
 
-  Simplified to exactly three structural panels - middle (back wall), left
-  wing, right wing - all sharing one height, 350 mm. Earlier revisions split
-  each wing into a stepped inner/outer pair and added a separate crown and
-  pylon (wordmark and per-dock letter identity, respectively) above the back
-  wall; those five extra panels are gone, and with them the wordmark. The
-  human-readable letter is back, but as a decal on the back wall's own free
-  zone (z 200..350) rather than a fourth panel - see "letter" below. The
-  AprilTag is still the machine-readable identity marker; the two cannot drift
-  apart because CMakeLists.txt derives both textures from the same
-  DOCK_ASSIGNMENTS entry.
+  Three structural panels - middle (back wall), left wing, right wing - all
+  300 mm tall. The human-readable letter for dock @DOCK_LETTER@ is a decal on
+  the back wall's own free zone (z 200..300) rather than a fourth panel - see
+  "letter" below. The AprilTag is the machine-readable identity marker; the
+  two cannot drift apart because CMakeLists.txt derives both textures from
+  the same DOCK_ASSIGNMENTS entry.
 
   ==========================================================================
   WHAT THE APPEARANCE IS ALLOWED TO TOUCH
@@ -58,15 +54,14 @@
                              accent band's bottom edge.
     inward protrusions
     below z=180              FORBIDDEN. Occlusion or shadow on the tag.
-    inner faces, z 200..350  Free - texture and geometry. No legal scan height
-                             reaches it. Panels top out at z=350, so this is
+    inner faces, z 200..300  Free - texture and geometry. No legal scan height
+                             reaches it. Panels top out at z=300, so this is
                              also the top of the model.
     outer faces              Free. The robot never sees these from the bay.
 
-  So: the accent band (z 200..260) and the letter decal (z 269..341) both sit
-  at z >= 200. Nothing below that moved. Two side effects are improvements
-  rather than costs - the panels went from 0.82 to 0.90 diffuse, which is MORE
-  reflective in the band, not less; and the added pattern gives the OAK-D's
+  So: the accent band (z 200..210) and the letter decal (z 219..291) both
+  sit at z >= 200. The panels are 0.90 diffuse, which gives the LiDAR full
+  range off the inner faces, and the accent band's pattern gives the OAK-D's
   stereo pair something to correlate on, where a blank wall is close to its
   worst case.
 
@@ -81,11 +76,11 @@
 
       <!-- ============================ walls ============================ -->
 
-      <!-- Back wall: 8 x 400 x 350, inner face at x=0, spans y -200..+200.
+      <!-- Back wall: 8 x 400 x 300, inner face at x=0, spans y -200..+200.
            Deliberately left as one monolithic panel. -->
       <visual name="back_wall_visual">
-        <pose>-0.004 0 0.175 0 0 0</pose>
-        <geometry><box><size>0.008 0.400 0.350</size></box></geometry>
+        <pose>-0.004 0 0.150 0 0 0</pose>
+        <geometry><box><size>0.008 0.400 0.300</size></box></geometry>
         <!-- Off-white and matte: ~90 % reflectivity gives the LiDAR full range,
              where a dark or glossy dock returns weakly. -->
         <material>
@@ -95,15 +90,15 @@
         </material>
       </visual>
       <collision name="back_wall_collision">
-        <pose>-0.004 0 0.175 0 0 0</pose>
-        <geometry><box><size>0.008 0.400 0.350</size></box></geometry>
+        <pose>-0.004 0 0.150 0 0 0</pose>
+        <geometry><box><size>0.008 0.400 0.300</size></box></geometry>
       </collision>
 
-      <!-- Wings, each now a single 240 mm panel rather than a stepped
-           inner/outer pair - three panels total for the whole dock (middle,
-           left, right), all 350 mm tall, matching the back wall.
+      <!-- Wings: three panels total for the whole dock (middle, left,
+           right), all 300 mm tall, matching the back wall, each wing
+           200 mm long.
 
-           Full wing inner face runs (0, 200) -> (169.706, 369.706); local +X
+           Full wing inner face runs (0, 200) -> (141.421, 341.421); local +X
            points at the mouth. The panel centre is the inner-face midpoint
            offset 4 mm along the panel's outward normal, (-sin(yaw), cos(yaw))
            - i.e. (-0.70711, 0.70711) for the left wing's +45 deg yaw - same
@@ -114,8 +109,8 @@
            the values below place the inner-face corner at exactly (0, 200),
            coincident with the back wall's edge. -->
       <visual name="left_wing_visual">
-        <pose>0.08202 0.28768 0.175 0 0 0.785398</pose>
-        <geometry><box><size>0.240 0.008 0.350</size></box></geometry>
+        <pose>0.06788 0.27354 0.150 0 0 0.785398</pose>
+        <geometry><box><size>0.200 0.008 0.300</size></box></geometry>
         <material>
           <ambient>0.62 0.62 0.62 1</ambient>
           <diffuse>0.90 0.90 0.89 1</diffuse>
@@ -123,14 +118,14 @@
         </material>
       </visual>
       <collision name="left_wing_collision">
-        <pose>0.08202 0.28768 0.175 0 0 0.785398</pose>
-        <geometry><box><size>0.240 0.008 0.350</size></box></geometry>
+        <pose>0.06788 0.27354 0.150 0 0 0.785398</pose>
+        <geometry><box><size>0.200 0.008 0.300</size></box></geometry>
       </collision>
 
       <!-- Right wing: the left wing mirrored in Y. -->
       <visual name="right_wing_visual">
-        <pose>0.08202 -0.28768 0.175 0 0 -0.785398</pose>
-        <geometry><box><size>0.240 0.008 0.350</size></box></geometry>
+        <pose>0.06788 -0.27354 0.150 0 0 -0.785398</pose>
+        <geometry><box><size>0.200 0.008 0.300</size></box></geometry>
         <material>
           <ambient>0.62 0.62 0.62 1</ambient>
           <diffuse>0.90 0.90 0.89 1</diffuse>
@@ -138,25 +133,29 @@
         </material>
       </visual>
       <collision name="right_wing_collision">
-        <pose>0.08202 -0.28768 0.175 0 0 -0.785398</pose>
-        <geometry><box><size>0.240 0.008 0.350</size></box></geometry>
+        <pose>0.06788 -0.27354 0.150 0 0 -0.785398</pose>
+        <geometry><box><size>0.200 0.008 0.300</size></box></geometry>
       </collision>
 
       <!-- ========================= accent band ========================= -->
 
-      <!-- A dark band wrapping all three inner faces at z 200..260, 1 mm proud
+      <!-- A dark band wrapping all three inner faces at z 200..210, 1 mm proud
            of the wall the way applied vinyl would be. This is the one styling
            element on the surface the robot actually looks at, and it is what
            keeps the wall from being a blank field.
 
-           z 200..260 is chosen, not convenient: 20 mm above the 180 mm ceiling
-           of the mandated LiDAR band, and 35.5 mm above the tag plate's top
-           edge at 164.5. No collision - it is paint, not structure.
+           z 200..210 is chosen, not convenient: the bottom edge is 20 mm
+           above the 180 mm ceiling of the mandated LiDAR band, and 35.5 mm
+           above the tag plate's top edge at 164.5. The band's thickness is
+           what's left over: the 100 mm free zone above z=200 has to hold the
+           band, the letter at its full 72 mm height, and a 9 mm clearance on
+           each side of the letter, which leaves 10 mm for the band. No
+           collision - it is paint, not structure.
 
-           One overlay per wing, sized to the wing's full 240 mm length. -->
+           One overlay per wing, sized to the wing's full 200 mm length. -->
       <visual name="back_wall_band_visual">
-        <pose>0.0005 0 0.230 0 0 0</pose>
-        <geometry><box><size>0.001 0.400 0.060</size></box></geometry>
+        <pose>0.0005 0 0.205 0 0 0</pose>
+        <geometry><box><size>0.001 0.400 0.010</size></box></geometry>
         <material>
           <ambient>0.050 0.050 0.055 1</ambient>
           <diffuse>0.085 0.085 0.095 1</diffuse>
@@ -165,8 +164,8 @@
       </visual>
 
       <visual name="left_wing_band_visual">
-        <pose>0.08520 0.28450 0.230 0 0 0.785398</pose>
-        <geometry><box><size>0.240 0.001 0.060</size></box></geometry>
+        <pose>0.07106 0.27036 0.205 0 0 0.785398</pose>
+        <geometry><box><size>0.200 0.001 0.010</size></box></geometry>
         <material>
           <ambient>0.050 0.050 0.055 1</ambient>
           <diffuse>0.085 0.085 0.095 1</diffuse>
@@ -175,8 +174,8 @@
       </visual>
 
       <visual name="right_wing_band_visual">
-        <pose>0.08520 -0.28450 0.230 0 0 -0.785398</pose>
-        <geometry><box><size>0.240 0.001 0.060</size></box></geometry>
+        <pose>0.07106 -0.27036 0.205 0 0 -0.785398</pose>
+        <geometry><box><size>0.200 0.001 0.010</size></box></geometry>
         <material>
           <ambient>0.050 0.050 0.055 1</ambient>
           <diffuse>0.085 0.085 0.095 1</diffuse>
@@ -191,19 +190,19 @@
            separate pylon, so it costs no extra panel.
 
            96 x 72 mm, the same 4:3 aspect as the source letter_*.png (960 x
-           720) so the glyph isn't stretched. Centred at z=305: that leaves a
-           9 mm gap above the band's top edge (260) and a 9 mm gap below the
-           wall's own top edge (350), so the plate clears both without
-           touching either. 1 mm proud at x=0.0005, the same convention as the
-           accent band and the tag, and likewise no collision - paint, not
-           structure.
+           720) so the glyph isn't stretched. Centred at z=255: that leaves a
+           9 mm gap above the band's top edge (210) and a 9 mm gap below the
+           wall's own top edge (300), so the plate clears both without
+           touching either. 1 mm proud at x=0.0005, the same convention as
+           the accent band and the tag, and likewise no collision - paint,
+           not structure.
 
            This is dock @DOCK_LETTER@, and the letter always matches the tag
            id because CMakeLists.txt derives DOCK_LETTER_TEXTURE and
            DOCK_TAG_TEXTURE from the same DOCK_ASSIGNMENTS entry - the two
            markings cannot drift apart. -->
       <visual name="dock_letter_visual">
-        <pose>0.0005 0 0.305 0 0 0</pose>
+        <pose>0.0005 0 0.255 0 0 0</pose>
         <geometry><box><size>0.001 0.096 0.072</size></box></geometry>
         <material>
           <ambient>1 1 1 1</ambient>
@@ -223,38 +222,18 @@
 
       <!-- AprilTag tag36h11 id 0, centred at z=130 mm - 28 mm above the
            OAK-D Lite's optical axis (oak_d_lite_link on base_footprint sits
-           at z=101.953 mm). Moved up from the previous z=102 mm (on-axis) to
-           clear room below for... nothing currently - the deciding constraint
-           is only the 7.5 mm gap to the accent band above it (plate top now
-           192.5 mm, band bottom 200 mm) and the unchanged 80-180 mm LiDAR
-           band below. A tag mounted much higher would force a camera mast,
-           which then punches a hole in the robot's own LiDAR scan plane; 130
-           mm stays clear of that.
+           at z=101.953 mm). The deciding constraints are the 7.5 mm gap to
+           the accent band above it (plate top 192.5 mm, band bottom 200 mm)
+           and the 80-180 mm LiDAR band below. A tag mounted much higher
+           would force a camera mast, which then punches a hole in the
+           robot's own LiDAR scan plane; 130 mm stays clear of that.
 
-           CAVEAT: the table and standoff figures below were measured with
-           the tag centred ON the optical axis (z=102 mm). Moving the tag
-           off-axis by 28 mm shifts the whole tag closer to one edge of the
-           camera frame at any given standoff, which tightens the minimum
-           standoff at which the full plate is visible (by roughly the same
-           28 mm at long range, less close-up where the horizontal FOV binds
-           instead - see below). The 39 mm on-axis minimum-standoff figure is
-           therefore now optimistic; re-measure in sim if the exact number
-           matters for the 150-250 mm scoring window.
-
-             tag centre z    black square in frame from   whole plate from
-                200 mm              231 mm standoff           256 mm
-                140 mm              114 mm                    138 mm
-                102 mm (on axis)     39 mm                     64 mm
-
-           Horizontal never binds at the old on-axis pose: 34.5 deg half-FOV
-           takes the 125 mm plate down to a 32 mm standoff, and horizontal
-           offset is unchanged by this move (only z shifted), so that number
-           still holds regardless of the vertical caveat above.
-
-           The on-axis measurements below (39 +/- 1 mm minimum standoff,
-           holding unbroken to 3 m, sub-mm bearing/range accuracy at 200 mm,
-           +11 mm / +97 mm range bias at 1 m / 3 m) describe the z=102 mm
-           pose and have not been re-measured at z=130 mm.
+           Minimum standoff for the whole plate to be visible is around
+           64-100 mm depending on how far the tag sits off the camera's
+           optical axis at a given range; horizontal never binds first, since
+           the 34.5 deg half-FOV alone would allow standoffs down to 32 mm.
+           Re-measure in sim if the exact figure matters for the 150-250 mm
+           scoring window.
 
            The plate is 125 mm square, NOT 100 mm. The source PNG is 10 x 10
            cells - an 8 x 8 tag inside a 1-cell white margin - so the black
@@ -272,20 +251,15 @@
            therefore reports the tag plane at x=1 mm, not x=0. No collision
            geometry - the tag is paint, not structure.
 
-           The plate now spans z 67.5..192.5 mm, so it fully covers the
-           80-180 mm LiDAR band that the wall height is chosen to cover, not
-           just crosses it as the z=102 mm pose did (that one spanned
-           39.5..164.5 mm, only overlapping the band's top part). That is a
-           print consideration, not a modelling one: gz-sim's gpu_lidar
-           ignores material, and the plate is only 1 mm proud, well under the
-           LD19P's 15 mm range noise (measured at the old pose: it left the
-           back-wall segment fit unchanged; not re-measured at this pose). On
-           the physical dock, matte black paper in the scan band returns more
-           weakly than the surrounding light panel - now true across the
-           whole band rather than just its top part.
+           The plate spans z 67.5..192.5 mm, fully covering the 80-180 mm
+           LiDAR band. That is a print consideration, not a modelling one:
+           gz-sim's gpu_lidar ignores material, and the plate is only 1 mm
+           proud, well under the LD19P's 15 mm range noise. On the physical
+           dock, matte black paper in the scan band returns more weakly than
+           the surrounding light panel across the whole band.
 
            No collision with the letter decal above: plate top at z=192.5 mm,
-           letter bottom at z=269 mm (see "letter" above) - 76.5 mm clear.
+           letter bottom at z=219 mm (see "letter" above) - 26.5 mm clear.
 
            This dock carries id @DOCK_TAG_ID@. -->
       <visual name="apriltag_visual">

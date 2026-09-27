@@ -198,7 +198,7 @@ foreach(assignment IN LISTS PROP_ASSIGNMENTS)
             DESTINATION share/${PROJECT_NAME}/worlds/${PROP_DIR})
   endif()
   # Licence and provenance travel with the assets, not only with the repo.
-  install(FILES props/README.md props/LICENSE.CC0 props/MANIFEST.sha256
+  install(FILES props/LICENSE.CC0 props/MANIFEST.sha256
           DESTINATION share/${PROJECT_NAME}/worlds/${PROP_DIR})
 
   message(STATUS "Prop ${PROP_DIR}: scale ${PROP_SCALE}, mesh ${PROP_MESH}")
