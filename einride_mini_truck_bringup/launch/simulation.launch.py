@@ -141,6 +141,26 @@ def generate_launch_description():
         output='both',
     )
 
+    # /oak/points, coloured, in oak_rgb_camera_optical_frame - what the real
+    # driver's RGBD pipeline publishes. Built from the depth and colour images
+    # rather than bridged from gz, whose cloud carries x-forward points under an
+    # optical frame_id and a grey rgb field; see einride_mini_truck_bridge.yaml.
+    # Depth and colour share one resolution, FOV and optical frame (model.sdf),
+    # so the depth is already registered to the colour camera.
+    oak_points = Node(
+        package='depth_image_proc',
+        executable='point_cloud_xyzrgb_node',
+        name='oak_points',
+        remappings=[
+            ('rgb/camera_info', '/oak/rgb/camera_info'),
+            ('rgb/image_rect_color', '/oak/rgb/image_raw'),
+            ('depth_registered/image_rect', '/oak/stereo/image_raw'),
+            ('points', '/oak/points'),
+        ],
+        parameters=[{'use_sim_time': True}],
+        output='both',
+    )
+
     bridge = Node(
         package='ros_gz_bridge',
         executable='parameter_bridge',
@@ -186,5 +206,6 @@ def generate_launch_description():
         scan_to_points,
         joint_state_throttle,
         oak_calibration_tf,
+        oak_points,
         common,
     ])

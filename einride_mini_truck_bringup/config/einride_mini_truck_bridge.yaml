@@ -89,7 +89,13 @@
 
 # --- OAK-D Lite (forward-facing) ------------------------------------------------
 # Topic layout follows depthai_ros_driver: /oak/rgb/*, /oak/stereo/*, /oak/points.
-# The point cloud is remapped here because gz derives it as <depth topic>/points.
+#
+# gz's own depth cloud, /oak/stereo/image_raw/points, is deliberately NOT bridged.
+# Its points are in the link's x-forward/z-up axes but its header names the
+# optical frame (z forward, y down), so every consumer drew it rotated - off to
+# the side and standing on end - and its rgb field is a grey ramp, not the colour
+# camera. simulation.launch.py builds /oak/points with depth_image_proc from the
+# depth and colour images below instead, in the optical frame, coloured.
 - ros_topic_name: "/oak/rgb/image_raw"
   gz_topic_name: "/oak/rgb/image_raw"
   ros_type_name: "sensor_msgs/msg/Image"
@@ -161,10 +167,4 @@
   gz_topic_name: "/oak/imu/data"
   ros_type_name: "sensor_msgs/msg/Imu"
   gz_type_name: "gz.msgs.IMU"
-  direction: GZ_TO_ROS
-
-- ros_topic_name: "/oak/points"
-  gz_topic_name: "/oak/stereo/image_raw/points"
-  ros_type_name: "sensor_msgs/msg/PointCloud2"
-  gz_type_name: "gz.msgs.PointCloudPacked"
   direction: GZ_TO_ROS

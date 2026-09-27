@@ -59,7 +59,9 @@ ros2 launch einride_mini_truck_bringup hardware.launch.py camera_config:=rgbster
 * Passing `camera_params:=<path>` uses your own file and ignores
   `camera_config`.
 
-Simulation always publishes every stream.
+Simulation always publishes every stream. Its `/oak/points` is built by
+`depth_image_proc` from `/oak/stereo/image_raw` and `/oak/rgb/image_raw`, in
+`oak_rgb_camera_optical_frame`, coloured from the colour camera.
 
 ## Camera settings
 

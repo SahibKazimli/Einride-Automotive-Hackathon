@@ -53,6 +53,7 @@
        ld19_scan_model emits a cloud, and building it the same way on both sides
        is what keeps the topic identical. -->
   <exec_depend>pointcloud_to_laserscan</exec_depend>
+  <exec_depend>depth_image_proc</exec_depend>
   <!-- WebSocket bridge for the Foxglove app. Not started by any launch file
        here: it runs as its own systemd service, einride-mini-truck-foxglove,
        whose unit lives in this package's systemd/ directory. Declared here so
