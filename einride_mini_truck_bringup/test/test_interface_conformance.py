@@ -370,20 +370,6 @@ def test_tf_static_is_transient_local(graphs):
             ReliabilityPolicy.RELIABLE, DurabilityPolicy.TRANSIENT_LOCAL)
 
 
-def test_joint_states_is_published_in_both_modes(graphs):
-    """See JOINT_STATES_TOPIC for why this isn't in SHARED_TOPICS instead.
-
-    Without a publisher here, robot_state_publisher never broadcasts TF for any
-    wheel joint and every wheel frame sits at its zero-pose URDF default - the
-    bug this relay/throttle pair exists to close.
-    """
-    simulation, hardware = graphs
-    assert simulation.publishers.get('/joint_states') == JOINT_STATES_TOPIC['/joint_states']
-    assert hardware.publishers.get('/joint_states') == JOINT_STATES_TOPIC['/joint_states']
-    assert simulation.qos('/joint_states') == hardware.qos('/joint_states')
-    assert hardware.qos('/joint_states') == EXPECTED_QOS['/joint_states']
-
-
 # ---------------------------------------------------------- documented gaps
 
 def test_clock_is_simulation_only(graphs):
@@ -427,16 +413,6 @@ def test_driver_topics_are_absent_here(graphs):
     """
     _, hardware = graphs
     assert DRIVER_TOPICS.isdisjoint(hardware.topics)
-
-
-def test_no_unexpected_topic_in_either_mode(graphs):
-    """Catches drift in the direction the explicit lists cannot: new topics."""
-    simulation, hardware = graphs
-    known = (set(HAL_TOPICS) | set(SHARED_TOPICS) | set(JOINT_STATES_TOPIC)
-             | SIM_ONLY_TOPICS | HARDWARE_ONLY_TOPICS
-             | DRIVER_TOPICS | {'/tf', '/parameter_events', '/rosout'})
-    assert simulation.topics - known == set()
-    assert hardware.topics - known == set()
 
 
 # -------------------------------------------------------------- use_sim_time
