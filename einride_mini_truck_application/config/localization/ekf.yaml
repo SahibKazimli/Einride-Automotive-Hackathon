@@ -1,0 +1,27 @@
+# robot_localization EKF: fuses wheel speed + gyro into /odom and the TF
+# odom -> base_footprint. Inputs come from localization/node.py.
+# Reference: https://docs.ros.org/en/jazzy/p/robot_localization/
+ekf_filter_node:
+  ros__parameters:
+    frequency: 30.0
+    two_d_mode: true            # flat floor: ignore z, roll, pitch
+    publish_tf: true
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_footprint
+    world_frame: odom
+
+    # Each *_config is 15 booleans:
+    # [x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az]
+
+    # Wheels: forward speed (and vy = 0, since a skid-steer robot cannot slide).
+    odom0: /wheel/odom
+    odom0_config: [false, false, false, false, false, false,
+                   true,  true,  false, false, false, false,
+                   false, false, false]
+
+    # Gyro (bias removed): turn rate only. No orientation on this hardware.
+    imu0: /imu/corrected
+    imu0_config: [false, false, false, false, false, false,
+                  false, false, false, false, false, true,
+                  false, false, false]
