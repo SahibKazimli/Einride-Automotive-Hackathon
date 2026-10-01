@@ -1,0 +1,24 @@
+# apriltag_ros: detects the dock tags in the (rectified) colour image and
+# publishes a TF frame tag_<id> for each one it sees, plus /detections.
+# Reference: https://github.com/christianrauch/apriltag_ros
+apriltag:
+  ros__parameters:
+    image_transport: raw
+    family: 36h11
+    # Side of the BLACK square in metres. The dock plate is 125 mm, but the
+    # black square on it is 100 mm. Measure your prints: a wrong size gives
+    # wrong distances.
+    size: 0.100
+    max_hamming: 0          # reject any tag with bit errors (no false docks)
+    pose_estimation_method: "pnp"
+    detector:
+      threads: 2
+      decimate: 2.0         # detect at half resolution (1280x720 -> 640x360), refine at full
+      blur: 0.0
+      # (detector.refine is left at its default, on: its type differs between
+      # apriltag library versions and a mismatch stops the node.)
+      sharpening: 0.25
+    tag:
+      ids: [0, 1, 2, 3, 4, 5, 6, 7]
+      frames: [tag_0, tag_1, tag_2, tag_3, tag_4, tag_5, tag_6, tag_7]
+      sizes: [0.100, 0.100, 0.100, 0.100, 0.100, 0.100, 0.100, 0.100]
