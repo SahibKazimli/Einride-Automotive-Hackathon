@@ -3,6 +3,6 @@
 #     cp saga.example.yaml saga.secret.yaml
 saga:
   ros__parameters:
-    saga_url: "http://127.0.0.1:8000"   # tools/mock_saga.py for testing
+    saga_url: "http://127.0.0.1:8000"   # the Saga server (organizers, or your laptop for testing)
     saga_token: "test-token"
     poll_period: 1.0

@@ -5,7 +5,7 @@
     ros2 launch einride_mini_truck_application app.launch.py mission:=false   # no Saga/mission
 
 Saga settings come from config/saga/saga.secret.yaml if it exists, else
-saga.example.yaml (pointing at tools/mock_saga.py on this machine).
+saga.example.yaml.
 """
 
 import os

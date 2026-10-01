@@ -44,3 +44,12 @@ def test_redock_if_saga_never_noticed() -> None:
     assert m.step(20, 1, False, False) is None
     assert m.step(32, 1, False, False) == Action('undock')
     assert m.step(33, 1, True, True) == Action('dock', 1)
+
+
+def test_waits_for_slow_organizer_by_default() -> None:
+    """On the real server a human confirms arrival; never leave on our own."""
+    m = Mission()
+    m.step(0, 1, False, False)
+    m.step(1, 1, True, True)
+    assert m.step(600, 1, False, False) is None
+    assert m.state == 'DOCKED'

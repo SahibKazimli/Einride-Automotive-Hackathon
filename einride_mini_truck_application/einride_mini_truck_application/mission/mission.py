@@ -24,10 +24,12 @@ class Action:
 
 
 class Mission:
-    def __init__(self, retry_delay: float = 2.0, redock_after: float = 30.0) -> None:
+    def __init__(self, retry_delay: float = 2.0, redock_after: float = 0.0) -> None:
         self.retry_delay = retry_delay
-        #: Seconds docked while Saga still asks for this same dock before trying
-        #: again (the dock was probably not counted). 0 disables.
+        # Seconds docked while Saga still asks for this same dock before trying
+        # again. 0 (default) disables it: on the real server an organizer
+        # confirms arrival by hand on /admin, so a slow click is normal and
+        # driving away would lose the delivery.
         self.redock_after = redock_after
         self.state = 'IDLE'
         self.target: Optional[int] = None

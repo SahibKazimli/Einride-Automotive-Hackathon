@@ -1,16 +1,6 @@
-"""Saga client: reply parsing, and a real HTTP round trip against the mock server."""
+"""Saga client: parsing /api/v1/route replies (docs/saga-ai.md)."""
 
-from http.server import ThreadingHTTPServer
-import os
-import sys
-import threading
-
-from einride_mini_truck_application.saga.client import parse_route_reply, SagaApi
-import pytest
-import requests
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
-from mock_saga import make_handler, MockSaga  # noqa: E402
+from einride_mini_truck_application.saga.client import parse_route_reply
 
 # The example reply from docs/saga-ai.md.
 DOC_REPLY = {
@@ -50,31 +40,3 @@ def test_no_route_before_event() -> None:
 
 def test_stay_still_when_event_stopped() -> None:
     assert parse_route_reply({**DOC_REPLY, 'event_state': 'stopped'}).next_tag is None
-
-
-@pytest.fixture
-def server():
-    saga = MockSaga([0, 1, 2], seed=1)
-    httpd = ThreadingHTTPServer(('127.0.0.1', 0), make_handler(saga, 'secret'))
-    threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    yield saga, f'http://127.0.0.1:{httpd.server_address[1]}'
-    httpd.shutdown()
-
-
-def test_client_against_mock_server(server) -> None:
-    saga, url = server
-    api = SagaApi(url, 'secret')
-    first = parse_route_reply(api.get_route_reply())
-    assert first.next_tag == saga.route['source']['tag_id']
-
-    saga.advance()   # loading in progress: stay still
-    assert parse_route_reply(api.get_route_reply()).next_tag is None
-    saga.advance()   # loading complete: go to the destination
-    assert parse_route_reply(api.get_route_reply()).next_tag == \
-        saga.route['destination']['tag_id']
-
-
-def test_wrong_token_is_401(server) -> None:
-    _, url = server
-    with pytest.raises(requests.HTTPError):
-        SagaApi(url, 'wrong').get_route_reply()
