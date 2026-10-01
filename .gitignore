@@ -38,3 +38,9 @@ __pycache__/
 .mypy_cache/
 *.egg-info/
 .DS_Store
+
+# Secrets (Saga AI token). The repo is public.
+*.secret.yaml
+# Local Python venv for running the pure-Python tests on a laptop
+venv/
+.venv/

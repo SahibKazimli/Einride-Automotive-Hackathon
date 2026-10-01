@@ -1,0 +1,7 @@
+# Laptop-only test dependencies. The robot gets these from apt via package.xml.
+# Install: python3 -m venv venv && venv/bin/pip install -r requirements-dev.txt
+pytest
+numpy
+opencv-contrib-python-headless
+requests
+pyyaml

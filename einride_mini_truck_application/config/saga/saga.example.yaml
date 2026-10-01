@@ -1,0 +1,8 @@
+# Copy to saga.secret.yaml (gitignored) and fill in what the organizers give
+# you. NEVER put the real token in this file: the repo is public.
+#     cp saga.example.yaml saga.secret.yaml
+saga:
+  ros__parameters:
+    saga_url: "http://127.0.0.1:8000"   # tools/mock_saga.py for testing
+    saga_token: "test-token"
+    poll_period: 1.0
