@@ -1,0 +1,48 @@
+# Dock database for Nav2's docking server: the competition arena.
+# Source: einride_mini_truck_gazebo/worlds/arena.sdf (6 x 6 m, origin at the centre).
+#
+# `pose` is where base_footprint must be when docked: 0.326 m out from the tag
+# (front of robot 200 mm from the back wall), facing the tag. `frame: arena`
+# is linked to odom by the start pose given at launch (start_x/start_y/start_yaw).
+# Only the rough position matters: the final approach uses the tag itself.
+docks:
+  dock_0:   # A, tag at (+2.992, -1.500)
+    type: competition_dock
+    frame: arena
+    pose: [2.666, -1.500, 0.0]
+    id: '0'
+  dock_1:   # B, tag at (+2.992, +1.500)
+    type: competition_dock
+    frame: arena
+    pose: [2.666, 1.500, 0.0]
+    id: '1'
+  dock_2:   # C, tag at (+1.500, +2.992)
+    type: competition_dock
+    frame: arena
+    pose: [1.500, 2.666, 1.5708]
+    id: '2'
+  dock_3:   # D, tag at (-1.500, +2.992)
+    type: competition_dock
+    frame: arena
+    pose: [-1.500, 2.666, 1.5708]
+    id: '3'
+  dock_4:   # E, tag at (-2.992, +1.500)
+    type: competition_dock
+    frame: arena
+    pose: [-2.666, 1.500, 3.1416]
+    id: '4'
+  dock_5:   # F, tag at (-2.992, -1.500)
+    type: competition_dock
+    frame: arena
+    pose: [-2.666, -1.500, 3.1416]
+    id: '5'
+  dock_6:   # G, tag at (-1.500, -2.992)
+    type: competition_dock
+    frame: arena
+    pose: [-1.500, -2.666, -1.5708]
+    id: '6'
+  dock_7:   # H, tag at (+1.500, -2.992)
+    type: competition_dock
+    frame: arena
+    pose: [1.500, -2.666, -1.5708]
+    id: '7'

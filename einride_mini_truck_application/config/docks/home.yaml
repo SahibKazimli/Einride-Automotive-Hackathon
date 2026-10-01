@@ -1,0 +1,21 @@
+# Dock database for testing at home with printed tags.
+#
+# Frame "arena" here = where the robot starts (launch with the default start
+# pose 0, 0, 0): x forward, y left, in metres. For each mock dock, measure
+# where its TAG is from the robot's start position, then:
+#     pose = tag position moved 0.326 m toward the robot, yaw = facing the tag.
+#
+# Example layout below:
+#   tag 0 taped 2.0 m straight ahead, facing the robot
+#   tag 1 taped 1.5 m to the left (and 0.5 m ahead), facing right toward the robot's path
+docks:
+  dock_0:   # tag at (2.0, 0.0), facing -x
+    type: competition_dock
+    frame: arena
+    pose: [1.674, 0.0, 0.0]
+    id: '0'
+  dock_1:   # tag at (0.5, 1.5), facing -y
+    type: competition_dock
+    frame: arena
+    pose: [0.5, 1.174, 1.5708]
+    id: '1'

@@ -1,0 +1,48 @@
+# Last line of safety: every motion command passes through here before it
+# reaches the wheels (/cmd_vel). It looks at raw lidar points, independent of
+# Nav2's planning, and stops or slows the robot when something is too close.
+# Reference: nav2_collision_monitor (Jazzy).
+#
+# Robot: front/back edge 0.126 m from base_footprint, ~0.115 m half width.
+# A docked robot's front is 0.20 m from the dock wall, so the STOP zone must
+# reach less than 0.20 m past the front or docking is impossible.
+collision_monitor:
+  ros__parameters:
+    base_frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_out_topic: "cmd_vel"
+    state_topic: "collision_monitor_state"
+    transform_tolerance: 0.2
+    source_timeout: 1.0        # no lidar for 1 s -> stop
+    base_shift_correction: True
+    stop_pub_timeout: 2.0
+    polygons: ["PolygonStop", "PolygonSlow"]
+    # Stop: anything within 8 cm of the front or back, or 1.5 cm of the sides.
+    PolygonStop:
+      type: "polygon"
+      points: "[[0.206, 0.13], [0.206, -0.13], [-0.206, -0.13], [-0.206, 0.13]]"
+      action_type: "stop"
+      min_points: 3            # ignore single noisy lidar returns
+      visualize: True
+      polygon_pub_topic: "polygon_stop"
+      enabled: True
+    # Slow to 40 % when something is within ~30 cm ahead.
+    PolygonSlow:
+      type: "polygon"
+      points: "[[0.43, 0.16], [0.43, -0.16], [-0.30, -0.16], [-0.30, 0.16]]"
+      action_type: "slowdown"
+      min_points: 3
+      slowdown_ratio: 0.4
+      visualize: True
+      polygon_pub_topic: "polygon_slowdown"
+      enabled: True
+    observation_sources: ["scan"]
+    scan:
+      type: "scan"
+      topic: "/scan"
+      # The lidar sits 0.142 m above the floor; Nav2's default min_height of
+      # 0.15 would silently drop every point it measures.
+      min_height: 0.0
+      max_height: 2.0
+      enabled: True
