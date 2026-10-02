@@ -1,21 +1,53 @@
-# Dock database for testing at home with printed tags.
+# Dock database for testing at home with one screen/printed tag moved between spots.
 #
 # Frame "arena" here = where the robot starts (launch with the default start
-# pose 0, 0, 0): x forward, y left, in metres. For each mock dock, measure
-# where its TAG is from the robot's start position, then:
+# pose 0, 0, 0): x forward, y left, in metres. For each spot, measure where the
+# TAG is from the robot's start position, then:
 #     pose = tag position moved 0.326 m toward the robot, yaw = facing the tag.
 #
-# Example layout below:
-#   tag 0 taped 2.0 m straight ahead, facing the robot
-#   tag 1 taped 1.5 m to the left (and 0.5 m ahead), facing right toward the robot's path
+# Saga hands out all 8 docks (A-H = tags 0-7), so they share two spots here:
+#   spot 1: tag 2.0 m straight ahead, facing the robot          -> even tags (A C E G)
+#   spot 2: tag 0.42 m ahead, 1.0 m left, facing right (-y)      -> odd tags  (B D F H)
+# Put the screen at the spot of the dock Saga asks for, showing that dock's tag.
+# Staging (0.7 m in front of each dock pose): spot 1 (0.974, 0), spot 2 (0.42, -0.026).
 docks:
-  dock_0:   # tag at (2.0, 0.0), facing -x
+  dock_0:   # A, spot 1
     type: competition_dock
     frame: arena
     pose: [1.674, 0.0, 0.0]
     id: '0'
-  dock_1:   # tag at (0.5, 1.5), facing -y
+  dock_1:   # B, spot 2
     type: competition_dock
     frame: arena
-    pose: [0.5, 1.174, 1.5708]
+    pose: [0.42, 0.674, 1.5708]
     id: '1'
+  dock_2:   # C, spot 1
+    type: competition_dock
+    frame: arena
+    pose: [1.674, 0.0, 0.0]
+    id: '2'
+  dock_3:   # D, spot 2
+    type: competition_dock
+    frame: arena
+    pose: [0.42, 0.674, 1.5708]
+    id: '3'
+  dock_4:   # E, spot 1
+    type: competition_dock
+    frame: arena
+    pose: [1.674, 0.0, 0.0]
+    id: '4'
+  dock_5:   # F, spot 2
+    type: competition_dock
+    frame: arena
+    pose: [0.42, 0.674, 1.5708]
+    id: '5'
+  dock_6:   # G, spot 1
+    type: competition_dock
+    frame: arena
+    pose: [1.674, 0.0, 0.0]
+    id: '6'
+  dock_7:   # H, spot 2
+    type: competition_dock
+    frame: arena
+    pose: [0.42, 0.674, 1.5708]
+    id: '7'
