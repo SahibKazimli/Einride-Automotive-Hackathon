@@ -27,13 +27,15 @@ collision_monitor:
       visualize: True
       polygon_pub_topic: "polygon_stop"
       enabled: True
-    # Slow to 40 % when something is within ~30 cm ahead.
+    # Slow to 70 % when something is within ~30 cm ahead.
     PolygonSlow:
       type: "polygon"
       points: "[[0.43, 0.16], [0.43, -0.16], [-0.30, -0.16], [-0.30, 0.16]]"
       action_type: "slowdown"
       min_points: 3
-      slowdown_ratio: 0.4
+      # Scales turning too: at 0.4 a turn in place next to an obstacle was too
+      # weak to move the skid-steer robot at all (bucket test, 2026-10-02).
+      slowdown_ratio: 0.7
       visualize: True
       polygon_pub_topic: "polygon_slowdown"
       enabled: True

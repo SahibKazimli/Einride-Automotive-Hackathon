@@ -59,7 +59,9 @@ controller_server:
       min_lookahead_dist: 0.25
       max_lookahead_dist: 0.8
       lookahead_time: 1.5
-      rotate_to_heading_angular_vel: 0.8
+      # Skid steering only reaches ~40 % of a commanded turn rate on this floor
+      # (test 1, 2026-10-02), and weak turn commands just scrub the tyres.
+      rotate_to_heading_angular_vel: 1.2
       transform_tolerance: 0.1
       use_velocity_scaled_lookahead_dist: false
       min_approach_linear_velocity: 0.08   # below ~0.1 m/s the wheels start unevenly
@@ -69,7 +71,7 @@ controller_server:
       use_regulated_linear_velocity_scaling: true
       use_cost_regulated_linear_velocity_scaling: false
       regulated_linear_scaling_min_radius: 0.6
-      regulated_linear_scaling_min_speed: 0.1
+      regulated_linear_scaling_min_speed: 0.12
       use_rotate_to_heading: true
       allow_reversing: false
       rotate_to_heading_min_angle: 0.6
