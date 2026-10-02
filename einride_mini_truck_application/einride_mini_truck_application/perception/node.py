@@ -5,11 +5,18 @@ config/perception/apriltag.yaml). For the tag the mission is docking at, this
 node looks that frame up in base_footprint, computes where the robot must stop
 (dock_pose.py), and publishes it.
 
+It also gates the camera (camera_gate.py): apriltag_ros reads /dock_camera/*,
+which carries images only while the robot is near the target dock, so the
+detector idles the rest of the time. Images pass through as raw bytes (never
+decoded here) and at most `max_image_rate` per second.
+
 Subscribes
     /detections (apriltag_msgs/AprilTagDetectionArray): which tags were seen, when
     /mission/target_tag (std_msgs/Int32): which tag to report, -1 = none
+    /oak/rgb/image_raw, /oak/rgb/camera_info: only while the gate is open
 Publishes
     /detected_dock_pose (geometry_msgs/PoseStamped) in base_footprint
+    /dock_camera/image_raw, /dock_camera/camera_info: input for apriltag_ros
 """
 
 from apriltag_msgs.msg import AprilTagDetectionArray
@@ -17,11 +24,14 @@ from geometry_msgs.msg import PoseStamped
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data, QoSProfile
 from rclpy.time import Time
+from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Int32
 from tf2_ros import Buffer, TransformException, TransformListener
 from tf_transformations import quaternion_from_euler, quaternion_matrix
 
+from .camera_gate import CameraGate, load_dock_positions
 from .dock_pose import docked_pose
 
 
@@ -41,10 +51,67 @@ class DockPoseNode(Node):
         self.create_subscription(Int32, '/mission/target_tag', self.on_target, 10)
         self.create_subscription(AprilTagDetectionArray, '/detections', self.on_detections, 10)
 
+        # Camera gate.
+        p = self.declare_parameter
+        database = p('dock_database', '').value
+        self.docks = load_dock_positions(database) if database else {}
+        self.dock_frame = p('dock_frame', 'arena').value
+        self.gate = CameraGate(p('gate_on_distance', 1.6).value,
+                               p('gate_off_distance', 1.9).value)
+        self.min_image_period = 1.0 / p('max_image_rate', 10.0).value
+        self.last_image = 0.0
+        out = QoSProfile(depth=2)
+        self.image_pub = self.create_publisher(Image, '/dock_camera/image_raw', out)
+        self.info_pub = self.create_publisher(CameraInfo, '/dock_camera/camera_info', out)
+        self.camera_subs = []
+        self.create_timer(0.2, self.update_gate)
+        if not self.docks:
+            self.get_logger().warn('No dock_database: camera gate opens whenever a target is set')
+
     def on_target(self, msg: Int32) -> None:
         if msg.data != self.target:
             self.get_logger().info(f'Reporting dock pose for tag {msg.data}')
         self.target = msg.data
+
+    def update_gate(self) -> None:
+        if self.target < 0:
+            dock = None
+        elif self.docks:
+            dock = self.docks.get(self.target)
+        else:
+            dock = (0.0, 0.0)   # no layout known: treat every target as near
+        robot = None
+        if dock is not None and self.docks:
+            try:
+                tf = self.tf_buffer.lookup_transform(self.dock_frame, self.base_frame, Time())
+                robot = (tf.transform.translation.x, tf.transform.translation.y)
+            except TransformException:
+                pass
+        was_open = self.gate.open
+        is_open = self.gate.update(robot, dock) if self.docks else dock is not None
+        self.gate.open = is_open
+        if is_open == was_open:
+            return
+        if is_open:
+            # raw=True: callbacks get the serialized bytes, forwarded undecoded.
+            self.camera_subs = [
+                self.create_subscription(Image, '/oak/rgb/image_raw', self.on_image,
+                                         qos_profile_sensor_data, raw=True),
+                self.create_subscription(CameraInfo, '/oak/rgb/camera_info', self.info_pub.publish,
+                                         qos_profile_sensor_data, raw=True)]
+            self.get_logger().info(f'Near dock of tag {self.target}: tag detection on')
+        else:
+            for sub in self.camera_subs:
+                self.destroy_subscription(sub)
+            self.camera_subs = []
+            self.get_logger().info('Tag detection off')
+
+    def on_image(self, data: bytes) -> None:
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if now - self.last_image < self.min_image_period:
+            return
+        self.last_image = now
+        self.image_pub.publish(data)
 
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
         if self.target < 0 or not any(d.id == self.target for d in msg.detections):

@@ -45,7 +45,8 @@ def generate_launch_description() -> LaunchDescription:
                               description='undistort the image before tag detection'),
 
         include('localization.launch.py'),
-        include('perception.launch.py', rectify=LaunchConfiguration('rectify')),
+        include('perception.launch.py', rectify=LaunchConfiguration('rectify'),
+                layout=LaunchConfiguration('layout')),
         include('navigation.launch.py',
                 layout=LaunchConfiguration('layout'),
                 start_x=LaunchConfiguration('start_x'),
