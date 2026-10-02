@@ -32,6 +32,8 @@ class DockPoseNode(Node):
         self.declare_parameter('tag_frame_prefix', 'tag_')
         self.base_frame = self.get_parameter('base_frame').value
         self.prefix = self.get_parameter('tag_frame_prefix').value
+        # Seconds a tag TF may lag its detection and still count as that sighting.
+        self.max_age = self.declare_parameter('max_tf_age', 2.0).value
         self.target = -1
         self.tf_buffer = Buffer()
         # Own thread: the tag's TF can arrive just after its /detections message,
@@ -51,13 +53,18 @@ class DockPoseNode(Node):
             return
         frame = f'{self.prefix}{self.target}'
         try:
+            # Newest available, not the image time: on the busy Jetson the tag's
+            # TF can arrive over a second after /detections (2026-10-02). The
+            # pose is stamped with the TF's own time below, so it stays exact.
             tf = self.tf_buffer.lookup_transform(
-                self.base_frame, frame, Time.from_msg(msg.header.stamp),
-                timeout=Duration(seconds=0.2))
+                self.base_frame, frame, Time(), timeout=Duration(seconds=0.2))
         except TransformException as error:
             self.get_logger().warn(f'No TF {self.base_frame} <- {frame}: {error}',
                                    throttle_duration_sec=2.0)
             return
+        age = Time.from_msg(msg.header.stamp) - Time.from_msg(tf.header.stamp)
+        if age > Duration(seconds=self.max_age):
+            return   # that TF is from an older sighting, not this detection
         t = tf.transform.translation
         q = tf.transform.rotation
         rotation = quaternion_matrix([q.x, q.y, q.z, q.w])[:3, :3].tolist()
@@ -66,7 +73,7 @@ class DockPoseNode(Node):
         except ValueError:
             return
         out = PoseStamped()
-        out.header.stamp = msg.header.stamp
+        out.header.stamp = tf.header.stamp
         out.header.frame_id = self.base_frame
         out.pose.position.x = x
         out.pose.position.y = y
