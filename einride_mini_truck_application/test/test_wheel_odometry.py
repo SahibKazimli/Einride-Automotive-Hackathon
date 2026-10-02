@@ -13,6 +13,31 @@ def test_forward_speed() -> None:
     assert wheels.update(0.1, 0.25, 0.25) == pytest.approx(0.1)
 
 
+def test_centimetre_steps_average_out() -> None:
+    """Real encoders step 1 cm (0.25 rad) at a time; 0.2 m/s = a step every 50 ms
+    on average, but the steps arrive unevenly."""
+    wheels = WheelSpeed(wheel_radius=0.04, window=0.4)
+    angle, speeds = 0.0, []
+    for i in range(1, 41):                   # 2 s at 20 Hz, steps on 3 of 4 samples
+        if i % 4:
+            angle += 0.25
+        v = wheels.update(i * 0.05, angle, angle)
+        if i > 10:
+            speeds.append(v)
+    for v in speeds:
+        assert v == pytest.approx(0.15, abs=0.04)
+
+
+def test_speed_returns_to_zero_after_stopping() -> None:
+    wheels = WheelSpeed(window=0.4)
+    for i in range(10):
+        wheels.update(i * 0.05, i * 0.25, i * 0.25)
+    v = 1.0
+    for i in range(10, 25):
+        v = wheels.update(i * 0.05, 9 * 0.25, 9 * 0.25)
+    assert v == pytest.approx(0.0)
+
+
 def test_turning_in_place_has_no_forward_speed() -> None:
     wheels = WheelSpeed()
     wheels.update(0.0, 0.0, 0.0)

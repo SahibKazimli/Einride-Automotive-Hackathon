@@ -12,38 +12,56 @@ The hardware publishes raw wheel angles (/wheel_encoders) and a raw gyro
   it whenever the wheels are not turning (startup, waiting at docks).
 """
 
+from collections import deque
 from typing import Optional
 
 
 class WheelSpeed:
-    """Forward speed from two accumulated wheel angles (radians)."""
+    """Forward speed from two accumulated wheel angles (radians).
+
+    The real encoders count in whole centimetres (one step = 0.25 rad at
+    r = 0.04 m), so one 50 ms sample reads either 0 or 0.2 m/s. The speed is
+    therefore taken over the last `window` seconds instead of one sample.
+    """
 
     def __init__(self, wheel_radius: float = 0.040, max_step: float = 2.0,
-                 still_deadband: float = 0.005, still_time: float = 0.3) -> None:
+                 still_deadband: float = 0.005, still_time: float = 0.3,
+                 window: float = 0.4) -> None:
         self.wheel_radius = wheel_radius
         #: A larger jump between two samples means the MCU reset its counters.
         self.max_step = max_step
         #: Wheel angle change per sample (rad) below which the wheel is "not moving".
         self.still_deadband = still_deadband
         self.still_time = still_time
-        self._last: Optional[tuple[float, float, float]] = None
+        self.window = window
+        self._samples: deque[tuple[float, float, float]] = deque()
         self._last_motion_t: Optional[float] = None
 
     def update(self, t: float, left: float, right: float) -> Optional[float]:
         """Return forward speed in m/s, or None for the first/invalid sample."""
-        last = self._last
-        self._last = (t, left, right)
-        if last is None:
+        samples = self._samples
+        if not samples:
+            samples.append((t, left, right))
             self._last_motion_t = t
             return None
+        last = samples[-1]
         dt = t - last[0]
         dl = left - last[1]
         dr = right - last[2]
-        if dt <= 0.0 or abs(dl) > self.max_step or abs(dr) > self.max_step:
+        if dt <= 0.0:
+            return None
+        if abs(dl) > self.max_step or abs(dr) > self.max_step:
+            samples.clear()            # counter reset: start over from here
+            samples.append((t, left, right))
             return None
         if abs(dl) > self.still_deadband or abs(dr) > self.still_deadband:
             self._last_motion_t = t
-        return self.wheel_radius * (dl + dr) / 2.0 / dt
+        samples.append((t, left, right))
+        while len(samples) > 2 and t - samples[1][0] >= self.window:
+            samples.popleft()
+        first = samples[0]
+        span = t - first[0]
+        return self.wheel_radius * ((left - first[1]) + (right - first[2])) / 2.0 / span
 
     def is_still(self, t: float) -> bool:
         """True when neither wheel has moved for `still_time` seconds."""

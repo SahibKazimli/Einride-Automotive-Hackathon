@@ -30,6 +30,10 @@ class WheelOdometryNode(Node):
         super().__init__('wheel_odometry')
         p = self.declare_parameter
         p('wheel_radius', 0.040)
+        # The motor board reports centimetres, but the hardware driver treats
+        # them as metres, so /wheel_encoders is 100x too large. Measured
+        # 2026-10-02: 1 m driven = ~100 steps of 25 "rad".
+        p('encoder_scale', 0.01)
         p('left_joint', 'left_up_wheel_link_joint')
         p('right_joint', 'right_up_wheel_link_joint')
         p('base_frame', 'base_footprint')
@@ -41,6 +45,7 @@ class WheelOdometryNode(Node):
 
         self.speed = WheelSpeed(wheel_radius=g('wheel_radius'))
         self.bias = GyroBias()
+        self.encoder_scale = g('encoder_scale')
         self.left_joint = g('left_joint')
         self.right_joint = g('right_joint')
         self.base_frame = g('base_frame')
@@ -63,7 +68,8 @@ class WheelOdometryNode(Node):
             self.get_logger().warn(f'Encoder joints not in {list(msg.name)}',
                                    throttle_duration_sec=5.0)
             return
-        v = self.speed.update(seconds(msg.header.stamp), left, right)
+        k = self.encoder_scale
+        v = self.speed.update(seconds(msg.header.stamp), left * k, right * k)
         if v is None:
             return
         out = Odometry()
