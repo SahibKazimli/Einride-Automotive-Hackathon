@@ -31,19 +31,18 @@ def main() -> None:
     rclpy.init()
     node = rclpy.create_node('scan_near_robot')
     buffer = Buffer()
-    TransformListener(buffer, node, spin_thread=True)
+    TransformListener(buffer, node)   # fed by the spin_once loop below
     scans: list[LaserScan] = []
     node.create_subscription(LaserScan, '/scan', scans.append, qos_profile_sensor_data)
-    while rclpy.ok() and not scans:
-        rclpy.spin_once(node, timeout_sec=0.5)
-    scan = scans[0]
 
-    # The listener needs a moment to receive /tf_static after starting.
-    deadline = time.monotonic() + 5.0
-    while not buffer.can_transform('base_footprint', scan.header.frame_id, Time()):
+    # Wait for a scan and for /tf_static (discovery is slow on the robot).
+    deadline = time.monotonic() + 15.0
+    while not (scans and buffer.can_transform('base_footprint', scans[-1].header.frame_id,
+                                              Time())):
         if time.monotonic() > deadline:
-            raise SystemExit(f'No TF base_footprint <- {scan.header.frame_id} after 5 s')
-        time.sleep(0.1)
+            raise SystemExit('No /scan or no TF base_footprint <- lidar after 15 s')
+        rclpy.spin_once(node, timeout_sec=0.1)
+    scan = scans[-1]
     tf = buffer.lookup_transform('base_footprint', scan.header.frame_id, Time())
     t = tf.transform.translation
     q = tf.transform.rotation
