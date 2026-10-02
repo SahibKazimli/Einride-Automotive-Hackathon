@@ -34,7 +34,9 @@ class DockPoseNode(Node):
         self.prefix = self.get_parameter('tag_frame_prefix').value
         self.target = -1
         self.tf_buffer = Buffer()
-        self.tf_listener = TransformListener(self.tf_buffer, self)
+        # Own thread: the tag's TF can arrive just after its /detections message,
+        # and the lookup below must be able to wait for it.
+        self.tf_listener = TransformListener(self.tf_buffer, self, spin_thread=True)
         self.pub = self.create_publisher(PoseStamped, '/detected_dock_pose', 10)
         self.create_subscription(Int32, '/mission/target_tag', self.on_target, 10)
         self.create_subscription(AprilTagDetectionArray, '/detections', self.on_detections, 10)
@@ -51,7 +53,7 @@ class DockPoseNode(Node):
         try:
             tf = self.tf_buffer.lookup_transform(
                 self.base_frame, frame, Time.from_msg(msg.header.stamp),
-                timeout=Duration(seconds=0.05))
+                timeout=Duration(seconds=0.2))
         except TransformException as error:
             self.get_logger().warn(f'No TF {self.base_frame} <- {frame}: {error}',
                                    throttle_duration_sec=2.0)

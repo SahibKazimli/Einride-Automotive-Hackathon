@@ -12,7 +12,10 @@ bt_navigator:
     robot_base_frame: base_footprint
     odom_topic: /odom
     bt_loop_duration: 10
-    default_server_timeout: 20
+    # ms the BT waits for a server (planner, controller) to accept a goal. The
+    # default 20 ms is too short on the busy Jetson: 2026-10-02 every
+    # navigation failed with "Timed out ... compute_path_to_pose".
+    default_server_timeout: 1000
     wait_for_service_timeout: 1000
     action_server_result_timeout: 900.0
     navigators: ["navigate_to_pose", "navigate_through_poses"]
@@ -222,7 +225,9 @@ docking_server:
       staging_x_offset: -0.7
       staging_yaw_offset: 0.0
       use_external_detection_pose: true
-      external_detection_timeout: 1.0
+      # Tag detections arrive at only ~1 Hz with the full stack running (CPU);
+      # 1.0 s aborted docking between two detections.
+      external_detection_timeout: 2.0
       external_detection_translation_x: 0.0
       external_detection_translation_y: 0.0
       external_detection_rotation_roll: 0.0
