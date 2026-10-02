@@ -7,6 +7,7 @@ e.g. the lidar hitting the robot's own body.
 
     python3 tools/scan_near_robot.py            # one scan
     python3 tools/scan_near_robot.py --box 0.4  # wider box
+    python3 tools/scan_near_robot.py --topic /scan_filtered
 """
 
 import argparse
@@ -26,6 +27,7 @@ STOP_X, STOP_Y = 0.206, 0.13
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--box', type=float, default=0.30, help='half-size of box to print, m')
+    parser.add_argument('--topic', default='/scan', help='e.g. /scan_filtered')
     args = parser.parse_args()
 
     rclpy.init()
@@ -33,7 +35,7 @@ def main() -> None:
     buffer = Buffer()
     TransformListener(buffer, node)   # fed by the spin_once loop below
     scans: list[LaserScan] = []
-    node.create_subscription(LaserScan, '/scan', scans.append, qos_profile_sensor_data)
+    node.create_subscription(LaserScan, args.topic, scans.append, qos_profile_sensor_data)
 
     # Wait for a scan and for /tf_static (discovery is slow on the robot).
     deadline = time.monotonic() + 15.0

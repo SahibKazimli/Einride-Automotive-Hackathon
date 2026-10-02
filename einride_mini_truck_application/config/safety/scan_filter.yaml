@@ -1,0 +1,22 @@
+# laser_filters: removes lidar points that lie inside the robot itself.
+# The lidar sees two parts of the robot's own body (measured 2026-10-02 with
+# tools/scan_near_robot.py: ~10 points at x = -0.06, y = +-0.09 in
+# base_footprint). Unfiltered, the collision monitor counts them as an obstacle
+# touching the robot and never lets it drive.
+# Everything downstream (costmaps, collision monitor) reads /scan_filtered.
+scan_filter:
+  ros__parameters:
+    filter1:
+      name: robot_body
+      type: laser_filters/LaserScanBoxFilter
+      params:
+        box_frame: base_footprint
+        # The robot footprint (config/navigation/nav2.yaml), so a real
+        # obstacle touching the bumper (x = 0.126) is still seen.
+        min_x: -0.13
+        max_x: 0.12
+        min_y: -0.12
+        max_y: 0.12
+        min_z: -1.0
+        max_z: 1.0
+        invert: false

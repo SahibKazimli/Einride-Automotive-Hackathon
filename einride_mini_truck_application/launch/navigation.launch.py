@@ -33,6 +33,7 @@ def generate_launch_description() -> LaunchDescription:
     share = get_package_share_directory('einride_mini_truck_application')
     nav2 = os.path.join(share, 'config', 'navigation', 'nav2.yaml')
     safety = os.path.join(share, 'config', 'safety', 'collision_monitor.yaml')
+    scan_filter = os.path.join(share, 'config', 'safety', 'scan_filter.yaml')
     docks = PathJoinSubstitution(
         [share, 'config', 'docks', [LaunchConfiguration('layout'), '.yaml']])
     to_nav = [('cmd_vel', 'cmd_vel_nav')]
@@ -51,6 +52,11 @@ def generate_launch_description() -> LaunchDescription:
                         '--y', LaunchConfiguration('start_y'),
                         '--yaw', LaunchConfiguration('start_yaw'),
                         '--frame-id', 'arena', '--child-frame-id', 'odom']),
+
+        # /scan without the points that hit the robot itself -> /scan_filtered.
+        Node(package='laser_filters', executable='scan_to_scan_filter_chain',
+             name='scan_filter', parameters=[scan_filter],
+             remappings=[('scan', '/scan'), ('scan_filtered', '/scan_filtered')]),
 
         Node(package='nav2_controller', executable='controller_server', output='screen',
              parameters=[nav2], remappings=to_nav),
