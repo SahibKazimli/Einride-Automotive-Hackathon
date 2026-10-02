@@ -11,9 +11,9 @@ e.g. the lidar hitting the robot's own body.
 
 import argparse
 import math
+import time
 
 import rclpy
-from rclpy.duration import Duration
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time
 from sensor_msgs.msg import LaserScan
@@ -38,8 +38,13 @@ def main() -> None:
         rclpy.spin_once(node, timeout_sec=0.5)
     scan = scans[0]
 
-    tf = buffer.lookup_transform('base_footprint', scan.header.frame_id, Time(),
-                                 timeout=Duration(seconds=3.0))
+    # The listener needs a moment to receive /tf_static after starting.
+    deadline = time.monotonic() + 5.0
+    while not buffer.can_transform('base_footprint', scan.header.frame_id, Time()):
+        if time.monotonic() > deadline:
+            raise SystemExit(f'No TF base_footprint <- {scan.header.frame_id} after 5 s')
+        time.sleep(0.1)
+    tf = buffer.lookup_transform('base_footprint', scan.header.frame_id, Time())
     t = tf.transform.translation
     q = tf.transform.rotation
     m = quaternion_matrix([q.x, q.y, q.z, q.w])
