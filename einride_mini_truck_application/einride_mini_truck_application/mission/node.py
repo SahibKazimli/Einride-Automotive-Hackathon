@@ -112,9 +112,14 @@ def main(args: list[str] | None = None) -> None:
 
     def start_dock(tag: int) -> str | None:
         """Step 1: drive to a free staging pose. Returns the running task."""
-        dock = io.dock_in_grid_frame(tag)
-        if dock is None:   # no layout known: let the docking server stage itself
+        if tag not in io.docks:   # no layout known: let the docking server stage itself
             return 'dock' if nav.dockRobotByID(f'dock_{tag}', nav_to_dock=True) else None
+        dock = io.dock_in_grid_frame(tag)
+        if dock is None:   # TF not received yet (right after startup): retry shortly
+            return None
+        if io.grid is None:   # picking blind would give the nominal pose, maybe in an obstacle
+            log.info('No global costmap yet; waiting before choosing a staging pose')
+            return None
         staging = choose_staging(io.grid, dock)
         if staging is None:
             log.warn(f'Dock of tag {tag} is blocked (no free staging pose); waiting')

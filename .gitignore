@@ -44,3 +44,5 @@ __pycache__/
 # Local Python venv for running the pure-Python tests on a laptop
 venv/
 .venv/
+# Private Claude notes (robot login etc.)
+CLAUDE.local.md
