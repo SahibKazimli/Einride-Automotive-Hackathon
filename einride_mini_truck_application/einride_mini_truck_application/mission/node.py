@@ -24,6 +24,7 @@ import math
 
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
+from nav2_msgs.action import DockRobot
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from nav_msgs.msg import OccupancyGrid
 import rclpy
@@ -98,6 +99,15 @@ class MissionIO(Node):
         return msg
 
 
+def lost_tag(nav: BasicNavigator) -> bool:
+    """True if the finished DockRobot failed because the tag was not seen."""
+    try:
+        return nav.result_future.result().result.error_code == \
+            DockRobot.Result.FAILED_TO_DETECT_DOCK
+    except AttributeError:   # no result (cancelled) or an older nav2_msgs
+        return False
+
+
 def main(args: list[str] | None = None) -> None:
     rclpy.init(args=args)
     io = MissionIO()
@@ -110,6 +120,7 @@ def main(args: list[str] | None = None) -> None:
     rejected = False   # Nav2 refused / no staging pose: report as a failed task
     staging = None     # staging pose of the running dock attempt
     failed: list[Pose] = []   # staging poses where docking at `target` failed
+    retried = False    # the running dock attempt was already retried in place
     last_state = None
 
     def start_dock(tag: int) -> str | None:
@@ -154,6 +165,17 @@ def main(args: list[str] | None = None) -> None:
                 succeeded = nav.status == GoalStatus.STATUS_SUCCEEDED
                 if task == 'staging' and succeeded:
                     # Step 2: tag-guided approach from here.
+                    task = 'dock' if nav.dockRobotByID(f'dock_{target}', nav_to_dock=False) \
+                        else None
+                    rejected = task is None
+                    retried = False
+                elif task == 'dock' and not succeeded and not retried and lost_tag(nav):
+                    # The tag dropped out mid-approach. The robot is near the dock
+                    # and facing it, so try again from here before driving off to
+                    # another staging pose (that turn-away-and-back looked erratic,
+                    # run_2137 2026-10-03).
+                    log.warn(f'Lost tag {target} while docking; retrying from here')
+                    retried = True
                     task = 'dock' if nav.dockRobotByID(f'dock_{target}', nav_to_dock=False) \
                         else None
                     rejected = task is None

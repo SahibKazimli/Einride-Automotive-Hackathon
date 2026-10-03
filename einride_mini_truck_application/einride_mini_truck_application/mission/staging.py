@@ -35,7 +35,7 @@ MARGIN = 0.15
 LETHAL = 100
 
 # Tried in this order: straight in front first, nominal distance first.
-DISTANCES = (0.7, 0.6, 0.5, 0.4)
+DISTANCES = (0.7, 0.6, 0.5, 0.4, 0.3, 0.25)   # 0.3, 0.25: gap between obstacle and dock
 LATERALS = (0.0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6)   # 0.6: lane past a bucket
 # The last part of the lane next to the dock is ignored: the dock's own walls
 # and the tag holder are there (matches docking_server dock_collision_threshold).

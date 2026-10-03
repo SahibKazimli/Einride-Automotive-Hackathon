@@ -252,8 +252,11 @@ docking_server:
       staging_yaw_offset: 0.0
       use_external_detection_pose: true
       # Tag detections arrive at only ~1 Hz with the full stack running (CPU);
-      # 1.0 s aborted docking between two detections.
-      external_detection_timeout: 2.0
+      # 1.0 s aborted docking between two detections, and 2.0 s still aborted
+      # with the tag in plain view straight ahead (run_2137, 2026-10-03), which
+      # sent the robot off to re-stage. The pose is kept in odom, so a few
+      # seconds old is still accurate: the dock does not move.
+      external_detection_timeout: 5.0
       external_detection_translation_x: 0.0
       external_detection_translation_y: 0.0
       external_detection_rotation_roll: 0.0
