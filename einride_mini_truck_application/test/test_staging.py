@@ -48,6 +48,19 @@ def test_dock_fully_blocked() -> None:
     assert choose_staging(grid_with([(1.45, 0.0, 0.5)]), DOCK_G) is None
 
 
+def test_retry_skips_failed_staging_pose() -> None:
+    """2026-10-03: tag not visible from the chosen pose; every retry went back there."""
+    grid = grid_with([(1.1, 0.0, 0.15)])
+    first = choose_staging(grid, DOCK_G)
+    second = choose_staging(grid, DOCK_G, skip=[first])
+    assert second is not None and second[:2] != pytest.approx(first[:2])
+    assert footprint_free(grid, second) and lane_free(grid, second, DOCK_G)
+
+
+def test_all_skipped_gives_none() -> None:
+    assert choose_staging(None, DOCK_G, skip=candidates(DOCK_G)) is None
+
+
 def test_objects_at_the_dock_itself_are_ignored() -> None:
     """The tag holder / dock walls sit within the last 0.4 m."""
     grid = grid_with([(2.0, 0.0, 0.1)])   # the screen showing the tag

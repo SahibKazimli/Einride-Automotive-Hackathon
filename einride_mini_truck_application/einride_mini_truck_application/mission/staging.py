@@ -108,15 +108,19 @@ def candidates(dock: Pose, distances: Sequence[float] = DISTANCES,
     return out
 
 
-def choose_staging(grid: Optional[Grid], dock: Pose) -> Optional[Pose]:
+def choose_staging(grid: Optional[Grid], dock: Pose,
+                   skip: Sequence[Pose] = ()) -> Optional[Pose]:
     """First candidate where the robot fits and can drive into the dock.
 
-    No grid yet: the nominal pose (Nav2 will find out if it is blocked).
-    Every candidate blocked: None, meaning the dock is blocked; wait.
+    `skip`: poses where docking already failed (e.g. tag not seen from there),
+    so a retry looks from somewhere else instead of repeating the same failure.
+    No grid yet: the first candidate (Nav2 will find out if it is blocked).
+    Every candidate blocked or skipped: None; the caller waits or clears `skip`.
     """
-    poses = candidates(dock)
+    poses = [p for p in candidates(dock)
+             if not any(math.dist(p[:2], s[:2]) < 0.01 for s in skip)]
     if grid is None:
-        return poses[0]
+        return poses[0] if poses else None
     for pose in poses:
         if footprint_free(grid, pose) and lane_free(grid, pose, dock):
             return pose

@@ -74,7 +74,11 @@ Finals: 2026-10-09. ROS 2 Jazzy on a Jetson Orin Nano. Our code is the
   - Replace the staging grid math with nav2_simple_commander's `PyCostmap2D`
     + `FootprintCollisionChecker`; derive candidate distances from
     `staging_x_offset` instead of hardcoding.
-  - Remember failed staging candidates so a retry tries a different one.
-  - Camera images only reach apriltag at ~0.7 Hz (CPU); reduce load.
+  - Camera images only reach apriltag at ~0.7 Hz (CPU); reduce load, or move
+    detection to the GPU (NVIDIA `isaac_ros_apriltag`; big install, check
+    Jazzy/JetPack support first).
+  - Run at 17:30: staging around the bucket worked, but the tag was not where
+    home.yaml says (2.0 m straight ahead), so it was never seen from the
+    staging pose. Failed staging poses are now skipped on retry.
   - apriltag_node segfaults on shutdown (harmless).
   - SLAM / full-arena localization (a teammate's area).

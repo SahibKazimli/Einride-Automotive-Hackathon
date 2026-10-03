@@ -108,10 +108,14 @@ def main(args: list[str] | None = None) -> None:
     task = None        # None, 'staging' (NavigateToPose), 'dock' or 'undock'
     target = None      # tag of the running dock attempt
     rejected = False   # Nav2 refused / no staging pose: report as a failed task
+    staging = None     # staging pose of the running dock attempt
+    failed: list[Pose] = []   # staging poses where docking at `target` failed
     last_state = None
 
     def start_dock(tag: int) -> str | None:
         """Step 1: drive to a free staging pose. Returns the running task."""
+        nonlocal staging
+        staging = None
         if tag not in io.docks:   # no layout known: let the docking server stage itself
             return 'dock' if nav.dockRobotByID(f'dock_{tag}', nav_to_dock=True) else None
         dock = io.dock_in_grid_frame(tag)
@@ -120,7 +124,11 @@ def main(args: list[str] | None = None) -> None:
         if io.grid is None:   # picking blind would give the nominal pose, maybe in an obstacle
             log.info('No global costmap yet; waiting before choosing a staging pose')
             return None
-        staging = choose_staging(io.grid, dock)
+        staging = choose_staging(io.grid, dock, failed)
+        if staging is None and failed:   # tried every free pose: start over
+            log.warn(f'Docking at tag {tag} failed from every staging pose; trying them again')
+            failed.clear()
+            staging = choose_staging(io.grid, dock)
         if staging is None:
             log.warn(f'Dock of tag {tag} is blocked (no free staging pose); waiting')
             return None
@@ -150,6 +158,11 @@ def main(args: list[str] | None = None) -> None:
                         else None
                     rejected = task is None
                 else:
+                    if task == 'dock' and staging is not None:
+                        if succeeded:
+                            failed.clear()
+                        else:   # e.g. tag not seen from there: look from elsewhere next
+                            failed.append(staging)
                     task = None
                     done = True
                     ok = succeeded
@@ -157,6 +170,8 @@ def main(args: list[str] | None = None) -> None:
             action = mission.step(now, io.requested, done, ok)
             if action is not None:
                 if action.kind == 'dock':
+                    if action.tag != target:
+                        failed.clear()
                     target = action.tag
                     io.target_pub.publish(Int32(data=action.tag))
                     task = start_dock(action.tag)
