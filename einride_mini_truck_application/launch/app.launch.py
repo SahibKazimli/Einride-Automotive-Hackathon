@@ -16,16 +16,17 @@ from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node
+from launch_ros.actions import Node, SetParameter
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description() -> LaunchDescription:
     share = get_package_share_directory('einride_mini_truck_application')
 
-    def include(name: str, **arguments) -> IncludeLaunchDescription:
+    def include(name: str, condition=None, **arguments) -> IncludeLaunchDescription:
         return IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(share, 'launch', name)),
-            launch_arguments=arguments.items())
+            launch_arguments=arguments.items(), condition=condition)
 
     saga_dir = os.path.join(share, 'config', 'saga')
     saga_params = os.path.join(saga_dir, 'saga.secret.yaml')
@@ -45,8 +46,23 @@ def generate_launch_description() -> LaunchDescription:
                               description='start the Saga client and mission'),
         DeclareLaunchArgument('rectify', default_value='false',
                               description='undistort the image before tag detection'),
+        # false on hardware; true against simulation.launch.py, whose nodes stamp
+        # messages in /clock time. Without it the autonomy runs on wall time and
+        # drops every sim-stamped TF/scan (TF_OLD_DATA), so nothing moves.
+        DeclareLaunchArgument('use_sim_time', default_value='false',
+                              description='Take time from /clock. true in sim.'),
+        # The EKF owns odom -> base_footprint on hardware. In simulation Gazebo's
+        # DiffDrive already publishes /odom and that TF, so running the EKF too
+        # gives two conflicting sources and the pose jumps. Set false in sim.
+        DeclareLaunchArgument('localization', default_value='true',
+                              description='Run the EKF. false in sim (gz owns odom).'),
+        # Applies use_sim_time to every node below, including the included files.
+        SetParameter('use_sim_time',
+                     ParameterValue(LaunchConfiguration('use_sim_time'),
+                                    value_type=bool)),
 
-        include('localization.launch.py'),
+        include('localization.launch.py',
+                condition=IfCondition(LaunchConfiguration('localization'))),
         include('perception.launch.py', rectify=LaunchConfiguration('rectify'),
                 layout=LaunchConfiguration('layout')),
         include('navigation.launch.py',
