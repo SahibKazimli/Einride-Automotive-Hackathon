@@ -4,7 +4,8 @@ import math
 import os
 
 from einride_mini_truck_application.mission.staging import (
-    candidates, choose_staging, footprint_free, Grid, lane_free, load_dock_poses)
+    candidates, choose_staging, footprint_free, Grid, lane_free, load_dock_poses,
+    MAX_VIEW_ANGLE, TIGHT_MARGIN, view_angle)
 import pytest
 
 HOME = os.path.join(os.path.dirname(__file__), '..', 'config', 'docks', 'home.yaml')
@@ -59,9 +60,36 @@ def test_lidar_shadow_behind_bucket_is_not_staging() -> None:
     assert abs(pose[1]) >= 0.3                      # beside the shadow, not in it
 
 
-def test_dock_fully_blocked() -> None:
-    """Something parked right in the bay: no staging pose, wait instead."""
-    assert choose_staging(grid_with([(1.45, 0.0, 0.5)]), DOCK_G) is None
+def test_dock_fully_blocked_still_gives_somewhere_to_stand() -> None:
+    """Something parked right in the bay: never sit still; stand where the robot
+    fits (not inside the obstacle) and keep looking."""
+    grid = grid_with([(1.45, 0.0, 0.5)])
+    pose = choose_staging(grid, DOCK_G)
+    assert pose is not None
+    assert footprint_free(grid, pose, TIGHT_MARGIN)
+
+
+def test_bucket_in_front_stages_in_the_gap_before_the_dock() -> None:
+    """2026-10-03: with a bucket ~1 m ahead the robot swung out to steep side
+    spots. Head-on, between the bucket and the dock, is preferred."""
+    grid = grid_with([(1.0, 0.0, 0.15)])
+    pose = choose_staging(grid, DOCK_G)
+    assert pose[1] == pytest.approx(0.0) and pose[2] == pytest.approx(0.0)
+    assert pose[0] > 1.15                               # past the bucket
+    assert footprint_free(grid, pose)
+
+
+def test_staging_keeps_the_tag_in_view() -> None:
+    for x in (0.9, 1.0, 1.1, 1.2):
+        pose = choose_staging(grid_with([(x, 0.0, 0.15)]), DOCK_G)
+        assert view_angle(pose, DOCK_G) <= MAX_VIEW_ANGLE
+
+
+def test_candidates_head_on_first() -> None:
+    poses = candidates(DOCK_G)
+    angles = [round(view_angle(p, DOCK_G), 6) for p in poses]
+    assert angles == sorted(angles)
+    assert poses[0] == pytest.approx((0.974, 0.0, 0.0))
 
 
 def test_retry_skips_failed_staging_pose() -> None:
