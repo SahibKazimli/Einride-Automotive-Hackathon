@@ -3,11 +3,12 @@
 Docking runs in two steps so obstacles near the dock do not block it forever:
   1. pick a staging pose in front of the dock that is free on the live
      costmap (staging.py), and let Nav2 drive there around obstacles
-     (NavigateToPose);
+     (NavigateToPose, with the short-recovery tree in staging_bt.py);
   2. DockRobot without the docking server's own fixed staging pose: it
      approaches from where we are, steered by the AprilTag.
-If no staging pose is free (something parked in the bay), the mission waits
-and tries again with a fresh costmap.
+If either step fails, the next attempt uses another staging pose. If no
+staging pose is free (something parked in the bay), the mission waits and
+tries again with a fresh costmap.
 
 Subscribes
     /saga/next_tag (std_msgs/Int32): tag id to go to, -1 = stay still
@@ -21,8 +22,11 @@ Uses
 """
 
 import math
+import os
+import tempfile
 
 from action_msgs.msg import GoalStatus
+from ament_index_python.packages import get_package_share_directory
 from geometry_msgs.msg import PoseStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from nav_msgs.msg import OccupancyGrid
@@ -34,9 +38,12 @@ from std_msgs.msg import Int32, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from .mission import Mission
-from .staging import choose_staging, Grid, load_dock_poses, Pose
+from .staging import (choose_staging, Grid, load_dock_poses, load_limits, Pose,
+                      staging_clearance)
+from .staging_bt import write_tree
 
 DOCK_TYPE = 'competition_dock'
+CONFIG = os.path.join(get_package_share_directory('einride_mini_truck_application'), 'config')
 
 
 class MissionIO(Node):
@@ -50,6 +57,13 @@ class MissionIO(Node):
         self.docks = load_dock_poses(database) if database else {}
         if not self.docks:
             self.get_logger().warn('No dock_database: using the docking server staging pose')
+        # The same files Nav2 is launched with (launch/navigation.launch.py).
+        nav2 = self.declare_parameter(
+            'nav2_params', os.path.join(CONFIG, 'navigation', 'nav2.yaml')).value
+        monitor = self.declare_parameter(
+            'collision_monitor_params', os.path.join(CONFIG, 'safety', 'collision_monitor.yaml')
+        ).value
+        self.limits = load_limits(nav2, monitor)
         self.requested: int | None = None
         self.grid: Grid | None = None
         self.grid_frame = 'odom'
@@ -111,6 +125,13 @@ def main(args: list[str] | None = None) -> None:
     staging = None     # staging pose of the running dock attempt
     failed: list[Pose] = []   # staging poses where docking at `target` failed
     last_state = None
+    staging_tree = write_tree(tempfile.gettempdir())
+
+    def go_to_staging(pose: Pose) -> bool:
+        if nav.goToPose(io.pose_msg(pose), behavior_tree=staging_tree):
+            return True
+        log.warn(f'bt_navigator rejected {staging_tree}; using its default tree')
+        return nav.goToPose(io.pose_msg(pose))
 
     def start_dock(tag: int) -> str | None:
         """Step 1: drive to a free staging pose. Returns the running task."""
@@ -124,17 +145,19 @@ def main(args: list[str] | None = None) -> None:
         if io.grid is None:   # picking blind would give the nominal pose, maybe in an obstacle
             log.info('No global costmap yet; waiting before choosing a staging pose')
             return None
-        staging = choose_staging(io.grid, dock, failed)
+        staging = choose_staging(io.grid, dock, io.limits, failed)
         if staging is None and failed:   # tried every free pose: start over
             log.warn(f'Docking at tag {tag} failed from every staging pose; trying them again')
             failed.clear()
-            staging = choose_staging(io.grid, dock)
+            staging = choose_staging(io.grid, dock, io.limits)
         if staging is None:
             log.warn(f'Dock of tag {tag} is blocked (no free staging pose); waiting')
             return None
+        room = staging_clearance(io.grid, staging, io.limits)
         log.info(f'Staging for tag {tag} at ({staging[0]:.2f}, {staging[1]:.2f}, '
-                 f'{math.degrees(staging[2]):.0f} deg)')
-        return 'staging' if nav.goToPose(io.pose_msg(staging)) else None
+                 f'{math.degrees(staging[2]):.0f} deg), clearance {room:.2f} m '
+                 f'(needs {io.limits.turn_radius:.2f} to turn)')
+        return 'staging' if go_to_staging(staging) else None
 
     try:
         log.info('Waiting for Nav2 to come up...')
@@ -158,10 +181,13 @@ def main(args: list[str] | None = None) -> None:
                         else None
                     rejected = task is None
                 else:
-                    if task == 'dock' and staging is not None:
+                    if task in ('staging', 'dock') and staging is not None:
                         if succeeded:
                             failed.clear()
-                        else:   # e.g. tag not seen from there: look from elsewhere next
+                        else:   # Nav2 could not get there, or the tag was not seen from there
+                            log.warn(f'Task {task} for staging pose ({staging[0]:.2f}, '
+                                     f'{staging[1]:.2f}) failed (status {nav.status}); '
+                                     'next try from another pose')
                             failed.append(staging)
                     task = None
                     done = True

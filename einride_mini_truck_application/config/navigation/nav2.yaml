@@ -178,6 +178,9 @@ planner_server:
       plugin: "nav2_navfn_planner::NavfnPlanner"
       tolerance: 0.3
       use_astar: true
+      # navfn prices an unknown cell like an inscribed one (253 of 254), so
+      # paths avoid the unseen back of obstacles but can still cross ground the
+      # lidar has not seen yet. With false, a dock behind an unseen area has no path.
       allow_unknown: true
 
 behavior_server:
@@ -250,6 +253,9 @@ docking_server:
       use_external_detection_pose: true
       # Tag detections arrive at only ~1 Hz with the full stack running (CPU);
       # 1.0 s aborted docking between two detections.
+      # Checked as this server's clock minus the pose stamp, which is the camera
+      # image's capture stamp: it bounds the whole camera -> pose latency and
+      # assumes camera stamps are on this computer's clock (dock_pose checks).
       external_detection_timeout: 2.0
       external_detection_translation_x: 0.0
       external_detection_translation_y: 0.0
