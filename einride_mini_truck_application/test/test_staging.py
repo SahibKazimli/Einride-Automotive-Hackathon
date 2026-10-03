@@ -92,3 +92,10 @@ def test_candidates_face_the_dock_for_rotated_dock() -> None:
 def test_home_layout_loads_yaw() -> None:
     poses = load_dock_poses(HOME)
     assert poses[1] == pytest.approx((0.42, 0.674, 1.5708))
+
+
+def test_all_unseen_still_gives_a_pose() -> None:
+    """Never wait forever just because the lidar has not seen the bay yet."""
+    grid = grid_with([])
+    grid.data[:] = [-1] * len(grid.data)
+    assert choose_staging(grid, DOCK_G) == pytest.approx((0.974, 0.0, 0.0))

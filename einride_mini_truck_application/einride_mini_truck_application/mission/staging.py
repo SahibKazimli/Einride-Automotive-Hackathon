@@ -132,7 +132,11 @@ def choose_staging(grid: Optional[Grid], dock: Pose,
              if not any(math.dist(p[:2], s[:2]) < 0.01 for s in skip)]
     if grid is None:
         return poses[0] if poses else None
-    for pose in poses:
-        if footprint_free(grid, pose, unknown_blocks=True) and lane_free(grid, pose, dock):
-            return pose
+    # Prefer ground the lidar has seen free; if none is, accept unseen ground
+    # rather than wait forever (the robot must keep trying).
+    for unknown_blocks in (True, False):
+        for pose in poses:
+            if (footprint_free(grid, pose, unknown_blocks=unknown_blocks)
+                    and lane_free(grid, pose, dock)):
+                return pose
     return None
