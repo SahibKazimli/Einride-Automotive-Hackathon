@@ -8,10 +8,7 @@ node looks that frame up in base_footprint, computes where the robot must stop
 It also gates the camera (camera_gate.py): apriltag_ros reads /dock_camera/*,
 which carries images only while the robot is near the target dock, so the
 detector idles the rest of the time. Images pass through as raw bytes (never
-decoded here), at most `max_image_rate` per second and one at a time
-(timing.py). Published poses are moved onto this computer's clock if the
-camera's stamps are off it (timing.py), since the docking server compares
-them with its own clock.
+decoded here) and at most `max_image_rate` per second.
 
 Subscribes
     /detections (apriltag_msgs/AprilTagDetectionArray): which tags were seen, when
@@ -27,7 +24,7 @@ from geometry_msgs.msg import PoseStamped
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
-from rclpy.qos import DurabilityPolicy, qos_profile_sensor_data, QoSProfile
+from rclpy.qos import qos_profile_sensor_data, QoSProfile
 from rclpy.time import Time
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Int32
@@ -36,11 +33,6 @@ from tf_transformations import quaternion_from_euler, quaternion_matrix
 
 from .camera_gate import CameraGate, load_dock_positions
 from .dock_pose import docked_pose
-from .timing import ClockSkew, ImageThrottle
-
-
-def seconds(stamp) -> float:
-    return Time.from_msg(stamp).nanoseconds * 1e-9
 
 
 class DockPoseNode(Node):
@@ -56,11 +48,7 @@ class DockPoseNode(Node):
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.pub = self.create_publisher(PoseStamped, '/detected_dock_pose', 10)
-        # Latched like the mission's publisher, so a restarted dock_pose still
-        # learns the current target (test by hand with
-        # `ros2 topic pub --qos-durability transient_local ...`).
-        latched = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
-        self.create_subscription(Int32, '/mission/target_tag', self.on_target, latched)
+        self.create_subscription(Int32, '/mission/target_tag', self.on_target, 10)
         self.create_subscription(AprilTagDetectionArray, '/detections', self.on_detections, 10)
 
         # Camera gate.
@@ -70,9 +58,8 @@ class DockPoseNode(Node):
         self.dock_frame = p('dock_frame', 'arena').value
         self.gate = CameraGate(p('gate_on_distance', 1.6).value,
                                p('gate_off_distance', 1.9).value)
-        self.throttle = ImageThrottle(p('max_image_rate', 10.0).value,
-                                      p('detector_timeout', 0.5).value)
-        self.skew = ClockSkew(p('max_camera_delay', 2.0).value)
+        self.min_image_period = 1.0 / p('max_image_rate', 10.0).value
+        self.last_image = 0.0
         out = QoSProfile(depth=2)
         self.image_pub = self.create_publisher(Image, '/dock_camera/image_raw', out)
         self.info_pub = self.create_publisher(CameraInfo, '/dock_camera/camera_info', out)
@@ -106,14 +93,12 @@ class DockPoseNode(Node):
         if is_open == was_open:
             return
         if is_open:
-            # raw=True: the image callback gets the serialized bytes, forwarded
-            # undecoded. camera_info is small and decoded for its stamp.
-            self.skew.clear()
+            # raw=True: callbacks get the serialized bytes, forwarded undecoded.
             self.camera_subs = [
                 self.create_subscription(Image, '/oak/rgb/image_raw', self.on_image,
                                          qos_profile_sensor_data, raw=True),
-                self.create_subscription(CameraInfo, '/oak/rgb/camera_info', self.on_info,
-                                         qos_profile_sensor_data)]
+                self.create_subscription(CameraInfo, '/oak/rgb/camera_info', self.info_pub.publish,
+                                         qos_profile_sensor_data, raw=True)]
             self.get_logger().info(f'Near dock of tag {self.target}: tag detection on')
         else:
             for sub in self.camera_subs:
@@ -121,39 +106,21 @@ class DockPoseNode(Node):
             self.camera_subs = []
             self.get_logger().info('Tag detection off')
 
-    def clock_seconds(self) -> float:
-        return self.get_clock().now().nanoseconds * 1e-9
-
     def on_image(self, data: bytes) -> None:
-        if self.throttle.offer(self.clock_seconds()):
-            self.image_pub.publish(data)
-
-    def on_info(self, msg: CameraInfo) -> None:
-        self.skew.add(self.clock_seconds(), seconds(msg.header.stamp))
-        self.info_pub.publish(msg)
-        correction = self.skew.correction()
-        if correction:
-            side = 'behind' if correction > 0 else 'ahead of'
-            self.get_logger().error(
-                f'Camera clock is {abs(correction):.2f} s {side} this computer\'s (system '
-                'clock stepped after the camera driver started?). Shifting tag poses by that; '
-                'restart the camera driver to fix it at the source.',
-                throttle_duration_sec=10.0)
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if now - self.last_image < self.min_image_period:
+            return
+        self.last_image = now
+        self.image_pub.publish(data)
 
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
-        self.throttle.answered()
-        if self.target < 0:
-            return
-        seen = [d.id for d in msg.detections]
-        if self.target not in seen:
-            self.get_logger().info(f'Tag {self.target} not in the image (seen: {seen})',
-                                   throttle_duration_sec=2.0)
+        if self.target < 0 or not any(d.id == self.target for d in msg.detections):
             return
         frame = f'{self.prefix}{self.target}'
         try:
-            # Newest available, not the image time: the tag's TF can be handled
-            # after /detections. The pose is stamped with the TF's own time
-            # below, so it stays exact.
+            # Newest available, not the image time: on the busy Jetson the tag's
+            # TF can arrive over a second after /detections (2026-10-02). The
+            # pose is stamped with the TF's own time below, so it stays exact.
             tf = self.tf_buffer.lookup_transform(self.base_frame, frame, Time())
         except TransformException as error:
             self.get_logger().warn(f'No TF {self.base_frame} <- {frame}: {error}',
@@ -161,31 +128,16 @@ class DockPoseNode(Node):
             return
         age = Time.from_msg(msg.header.stamp) - Time.from_msg(tf.header.stamp)
         if age > Duration(seconds=self.max_age):
-            self.get_logger().warn(
-                f'Dropped tag {self.target}: newest {frame} TF is '
-                f'{age.nanoseconds * 1e-9:.2f} s older than the detection',
-                throttle_duration_sec=2.0)
-            return
+            return   # that TF is from an older sighting, not this detection
         t = tf.transform.translation
         q = tf.transform.rotation
         rotation = quaternion_matrix([q.x, q.y, q.z, q.w])[:3, :3].tolist()
         try:
             x, y, yaw = docked_pose([t.x, t.y, t.z], rotation)
-        except ValueError as error:
-            self.get_logger().warn(f'Dropped tag {self.target}: {error}',
-                                   throttle_duration_sec=2.0)
+        except ValueError:
             return
-        stamp = Time.from_msg(tf.header.stamp) + Duration(seconds=self.skew.correction())
-        # The docking server rejects poses older than external_detection_timeout.
-        age = self.clock_seconds() - stamp.nanoseconds * 1e-9
-        delay = self.skew.delay()
-        delay_text = 'unknown' if delay is None else f'{delay:.2f} s'
-        self.get_logger().info(
-            f'Dock pose for tag {self.target}: ({x:.2f}, {y:.2f}) m, {age:.2f} s old '
-            f'(camera -> here {delay_text})',
-            throttle_duration_sec=2.0)
         out = PoseStamped()
-        out.header.stamp = stamp.to_msg()
+        out.header.stamp = tf.header.stamp
         out.header.frame_id = self.base_frame
         out.pose.position.x = x
         out.pose.position.y = y
