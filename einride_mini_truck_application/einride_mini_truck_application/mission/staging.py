@@ -35,7 +35,9 @@ MARGIN = 0.15
 # Behind the robot less is needed: docking drives forward, away from it. This
 # lets the robot stand in the gap between a bucket and the dock.
 REAR_MARGIN = 0.05
-# Last resort when nothing else fits: the old margin, tight but drivable.
+# Last resort when nothing else fits. Not for docking from: a pose 5 cm from
+# a bucket left Nav2's controller stuck ("collision ahead", run_2159), so the
+# strict passes never use it.
 TIGHT_MARGIN = 0.05
 LETHAL = 100
 
@@ -166,8 +168,8 @@ def choose_staging(grid: Optional[Grid], dock: Pose,
     # (margin, refuse unseen ground, require tag in view and a clear lane)
     passes = ((MARGIN, True, True),        # seen free, comfortable clearance
               (MARGIN, False, True),       # accept ground the lidar has not seen
-              (TIGHT_MARGIN, False, True),  # squeeze past
-              (TIGHT_MARGIN, False, False))  # least bad: somewhere to look from
+              (MARGIN, False, False),      # least bad: tag off-view or lane blocked
+              (TIGHT_MARGIN, False, False))  # robot barely fits anywhere
     for margin, unknown_blocks, strict in passes:
         for pose in poses:
             if not footprint_free(grid, pose, margin, unknown_blocks):
