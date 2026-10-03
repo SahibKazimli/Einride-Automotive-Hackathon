@@ -31,6 +31,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
+from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PythonExpression
 
@@ -161,17 +162,27 @@ def generate_launch_description():
         output='both',
     )
 
+    # gz_odometry:=true (default): Gazebo's DiffDrive owns /odom and the
+    # odom -> base_footprint TF. gz_odometry:=false: send those two to dead
+    # topics so the application's EKF (app.launch.py localization:=true) can own
+    # them instead - the same localization stack that runs on the robot. Two
+    # nodes rather than one so the remapping is conditional.
+    bridge_params = [{
+        'config_file': os.path.join(pkg_project_bringup, 'config',
+                                    'einride_mini_truck_bridge.yaml'),
+        'qos_overrides./tf_static.publisher.durability': 'transient_local',
+        'use_sim_time': True,
+    }]
+    gz_odometry = LaunchConfiguration('gz_odometry')
     bridge = Node(
-        package='ros_gz_bridge',
-        executable='parameter_bridge',
-        parameters=[{
-            'config_file': os.path.join(pkg_project_bringup, 'config',
-                                        'einride_mini_truck_bridge.yaml'),
-            'qos_overrides./tf_static.publisher.durability': 'transient_local',
-            'use_sim_time': True,
-        }],
-        output='screen'
-    )
+        package='ros_gz_bridge', executable='parameter_bridge',
+        parameters=bridge_params, output='screen',
+        condition=IfCondition(gz_odometry))
+    bridge_ekf = Node(
+        package='ros_gz_bridge', executable='parameter_bridge',
+        parameters=bridge_params, output='screen',
+        remappings=[('/odom', '/gz/odom_unused'), ('/tf', '/gz/tf_unused')],
+        condition=UnlessCondition(gz_odometry))
 
     common = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -200,8 +211,14 @@ def generate_launch_description():
                          'Gazebo does not model return strength, so this is a '
                          "placeholder inside the real device's observed 7-255; "
                          '0.0 restores raw Gazebo behaviour.')),
+        DeclareLaunchArgument(
+            'gz_odometry', default_value='true',
+            description="Gazebo publishes /odom + odom->base. Set false to let "
+                        "the app's EKF (localization:=true) own them, matching "
+                        "how localization runs on the robot."),
         gz_sim,
         bridge,
+        bridge_ekf,
         ld19_scan_model,
         scan_to_points,
         joint_state_throttle,
