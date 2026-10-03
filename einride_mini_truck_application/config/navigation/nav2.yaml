@@ -127,7 +127,9 @@ local_costmap:
 global_costmap:
   global_costmap:
     ros__parameters:
-      update_frequency: 1.0
+      # Lidar into the planner's map 3x per second (was 1): obstacles that move
+      # into the route, e.g. other robots, show up in the next replan sooner.
+      update_frequency: 3.0
       publish_frequency: 1.0
       global_frame: odom
       robot_base_frame: base_footprint

@@ -15,7 +15,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
 
@@ -33,6 +33,8 @@ def generate_launch_description() -> LaunchDescription:
         saga_params = os.path.join(saga_dir, 'saga.example.yaml')
 
     mission = IfCondition(LaunchConfiguration('mission'))
+    docks = PathJoinSubstitution(
+        [share, 'config', 'docks', [LaunchConfiguration('layout'), '.yaml']])
     return LaunchDescription([
         DeclareLaunchArgument('layout', default_value='home',
                               description='config/docks/<layout>.yaml'),
@@ -56,5 +58,5 @@ def generate_launch_description() -> LaunchDescription:
         Node(package='einride_mini_truck_application', executable='saga', name='saga',
              output='screen', parameters=[saga_params], condition=mission),
         Node(package='einride_mini_truck_application', executable='mission',
-             output='screen', condition=mission),
+             output='screen', parameters=[{'dock_database': docks}], condition=mission),
     ])
