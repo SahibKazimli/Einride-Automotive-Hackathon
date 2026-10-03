@@ -53,6 +53,11 @@ TAG_DISTANCE = 0.326
 # Staging must see the tag within this angle off its face. ~30 deg is known to
 # detect; (1.27, 0.6) beside a bucket saw it at ~40 deg and was borderline.
 MAX_VIEW_ANGLE = math.radians(35.0)
+# A 2D lidar sees only an obstacle's near face; assume it is this deep. Unseen
+# cells this close to a seen obstacle count as obstacle. Without it the lane
+# check ran through the unseen back half of a bucket, and the docking server's
+# own check refused the approach once the robot saw it (run_2159, 2026-10-03).
+SHADOW_DEPTH = 0.3
 
 
 def load_dock_poses(path: str) -> dict[int, Pose]:
@@ -150,6 +155,24 @@ def candidates(dock: Pose, distances: Sequence[float] = DISTANCES,
     return sorted(out, key=lambda p: round(view_angle(p, dock), 6))
 
 
+def with_shadows(grid: Grid, depth: float = SHADOW_DEPTH) -> Grid:
+    """A copy of `grid` where unseen cells within `depth` of an obstacle are lethal."""
+    data = list(grid.data)
+    r = int(depth / grid.resolution)
+    offsets = [(dx, dy) for dx in range(-r, r + 1) for dy in range(-r, r + 1)
+               if dx * dx + dy * dy <= r * r]
+    w, h = grid.width, grid.height
+    for i, cost in enumerate(grid.data):
+        if cost < LETHAL:
+            continue
+        ix, iy = i % w, i // w
+        for dx, dy in offsets:
+            jx, jy = ix + dx, iy + dy
+            if 0 <= jx < w and 0 <= jy < h and data[jy * w + jx] < 0:
+                data[jy * w + jx] = LETHAL
+    return Grid(grid.origin_x, grid.origin_y, grid.resolution, w, h, data)
+
+
 def choose_staging(grid: Optional[Grid], dock: Pose,
                    skip: Sequence[Pose] = ()) -> Optional[Pose]:
     """First candidate where the robot fits and can drive into the dock.
@@ -165,6 +188,7 @@ def choose_staging(grid: Optional[Grid], dock: Pose,
              if not any(math.dist(p[:2], s[:2]) < 0.01 for s in skip)]
     if grid is None:
         return poses[0] if poses else None
+    grid = with_shadows(grid)
     # (margin, refuse unseen ground, require tag in view and a clear lane)
     passes = ((MARGIN, True, True),        # seen free, comfortable clearance
               (MARGIN, False, True),       # accept ground the lidar has not seen

@@ -5,7 +5,7 @@ import os
 
 from einride_mini_truck_application.mission.staging import (
     candidates, choose_staging, footprint_free, Grid, lane_free, load_dock_poses,
-    MAX_VIEW_ANGLE, TIGHT_MARGIN, view_angle)
+    MAX_VIEW_ANGLE, TIGHT_MARGIN, view_angle, with_shadows)
 import pytest
 
 HOME = os.path.join(os.path.dirname(__file__), '..', 'config', 'docks', 'home.yaml')
@@ -56,8 +56,9 @@ def test_lidar_shadow_behind_bucket_is_not_staging() -> None:
             grid.data[i] = -1                       # shadow behind it
     pose = choose_staging(grid, DOCK_G)
     assert pose is not None
-    assert footprint_free(grid, pose, unknown_blocks=True)
-    assert abs(pose[1]) >= 0.3                      # beside the shadow, not in it
+    # Not within a bucket's depth (SHADOW_DEPTH) behind the seen face.
+    assert footprint_free(with_shadows(grid), pose)
+    assert lane_free(with_shadows(grid), pose, DOCK_G)
 
 
 def test_dock_fully_blocked_still_gives_somewhere_to_stand() -> None:
@@ -127,3 +128,26 @@ def test_all_unseen_still_gives_a_pose() -> None:
     grid = grid_with([])
     grid.data[:] = [-1] * len(grid.data)
     assert choose_staging(grid, DOCK_G) == pytest.approx((0.974, 0.0, 0.0))
+
+
+def test_lane_does_not_cross_the_unseen_back_of_a_bucket() -> None:
+    """run_2159 / 2026-10-03: only the bucket's front face was seen; the lane
+    from a side spot ran through its unseen back half, and the docking
+    server refused the approach. Unseen cells right behind a seen obstacle
+    count as obstacle."""
+    face = [(1.0, y / 100, 0.03) for y in range(-15, 16, 5)]   # seen front face
+    grid = grid_with(face)
+    for i in range(len(grid.data)):
+        x = grid.origin_x + (i % grid.width + 0.5) * grid.resolution
+        y = grid.origin_y + (i // grid.width + 0.5) * grid.resolution
+        if 1.0 < x < 2.2 and abs(y) < 0.2 + (x - 1.0) * 0.2 and grid.data[i] == 0:
+            grid.data[i] = -1                                  # its lidar shadow
+    pose = choose_staging(grid, DOCK_G)
+    assert pose is not None
+    assert lane_free(with_shadows(grid), pose, DOCK_G)
+    assert pose[:2] != pytest.approx((1.074, 0.45))
+
+
+def test_shadows_leave_seen_cells_alone() -> None:
+    grid = grid_with([(1.0, 0.0, 0.1)])
+    assert with_shadows(grid).data == grid.data
