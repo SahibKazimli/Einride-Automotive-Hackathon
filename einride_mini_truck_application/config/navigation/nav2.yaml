@@ -75,7 +75,12 @@ controller_server:
       use_rotate_to_heading: true
       allow_reversing: false
       rotate_to_heading_min_angle: 0.6
-      max_angular_accel: 2.0
+      # RPP ramps turn-in-place from the robot's MEASURED turn rate. Skid steering
+      # does not move at all below ~0.3 rad/s, so with 2.0 it ramped 0 -> 0.1 ->
+      # (robot still not turning) 0.1 ... forever: /cmd_vel showed 0.14 rad/s
+      # while it sat still (2026-10-03). The velocity smoother still limits
+      # acceleration, open loop.
+      max_angular_accel: 20.0
       max_robot_pose_search_dist: 10.0
 
 # Robot outline: 0.251 m long (base_footprint centred), ~0.23 m wide.
