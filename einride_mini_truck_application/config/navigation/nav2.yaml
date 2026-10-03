@@ -232,7 +232,10 @@ docking_server:
     dock_approach_timeout: 30.0
     undock_linear_tolerance: 0.05
     undock_angular_tolerance: 0.1
-    max_retries: 3
+    # No retries inside the docking server: a retry backs up to its own fixed
+    # staging pose (0.7 m straight out from the dock), which drove the robot
+    # into the bucket (2026-10-03). The mission retries from a free staging pose.
+    max_retries: 0
     base_frame: "base_footprint"
     fixed_frame: "odom"
     dock_backwards: false

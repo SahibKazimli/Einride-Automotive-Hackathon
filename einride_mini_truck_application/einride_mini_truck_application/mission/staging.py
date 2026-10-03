@@ -29,12 +29,14 @@ Pose = tuple[float, float, float]   # x, y, yaw
 # Robot outline from config/navigation/nav2.yaml (base_footprint centred).
 HALF_LENGTH = 0.13
 HALF_WIDTH = 0.12
-MARGIN = 0.05         # keep this much clear around the outline
+# Keep this much clear around the outline. 0.05 put staging 3 cm from a bucket
+# and the docking controller's curved approach hit it (2026-10-03).
+MARGIN = 0.15
 LETHAL = 100
 
 # Tried in this order: straight in front first, nominal distance first.
 DISTANCES = (0.7, 0.6, 0.5, 0.4)
-LATERALS = (0.0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45)   # 0.45: around a ~0.3 m bucket
+LATERALS = (0.0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6)   # 0.6: lane past a bucket
 # The last part of the lane next to the dock is ignored: the dock's own walls
 # and the tag holder are there (matches docking_server dock_collision_threshold).
 DOCK_CLEARANCE = 0.4
