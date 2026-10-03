@@ -108,8 +108,13 @@ local_costmap:
           obstacle_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 5.0
-        inflation_radius: 0.25   # small: the docks are narrow bays
+        # The robot's corners reach 0.18 m from its centre; with 0.25 m and a
+        # steep falloff (5.0) the planner hugged a bucket so closely that the
+        # controller refused the path ("collision ahead", 2026-10-03). A wider,
+        # softer cushion keeps paths ~0.3 m clear. Docking itself is steered by
+        # the docking server, not this planner, so narrow bays are unaffected.
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.45
       always_send_full_costmap: True
 
 # No map, so the "global" costmap is a bigger rolling window in odom that
@@ -144,8 +149,13 @@ global_costmap:
           obstacle_min_range: 0.0
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 5.0
-        inflation_radius: 0.25
+        # The robot's corners reach 0.18 m from its centre; with 0.25 m and a
+        # steep falloff (5.0) the planner hugged a bucket so closely that the
+        # controller refused the path ("collision ahead", 2026-10-03). A wider,
+        # softer cushion keeps paths ~0.3 m clear. Docking itself is steered by
+        # the docking server, not this planner, so narrow bays are unaffected.
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.45
       always_send_full_costmap: True
 
 planner_server:
