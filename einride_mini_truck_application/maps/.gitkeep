@@ -1,0 +1,2 @@
+# Keeps the maps/ directory in git. The map files themselves (*.posegraph,
+# *.data) are gitignored - see the repo .gitignore and slam.md.

@@ -46,3 +46,8 @@ venv/
 .venv/
 # Private Claude notes (robot login etc.)
 CLAUDE.local.md
+
+# SLAM maps: generated, and the sim map is not the real arena. Rebuild per
+# environment (see slam.md). The maps/ dir itself is kept via .gitkeep.
+einride_mini_truck_application/maps/*
+!einride_mini_truck_application/maps/.gitkeep
