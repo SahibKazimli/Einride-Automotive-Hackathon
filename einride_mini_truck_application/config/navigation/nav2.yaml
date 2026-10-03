@@ -44,12 +44,14 @@ controller_server:
       required_movement_radius: 0.2
       movement_time_allowance: 10.0
     # Only used to reach the staging pose in front of a dock; the docking
-    # server does the precise part, so this can be loose.
+    # server does the precise part, so this can be loose. 0.10 m / 0.15 rad
+    # made the robot shuffle at the staging pose for seconds (2026-10-03);
+    # 0.35 rad (20 deg) still keeps the tag within the camera's +-35 deg.
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.10
-      yaw_goal_tolerance: 0.15
+      xy_goal_tolerance: 0.15
+      yaw_goal_tolerance: 0.35
     # Regulated Pure Pursuit: simple, cheap on the Jetson CPU, turns in place
     # toward the path first (suits skid steering).
     FollowPath:

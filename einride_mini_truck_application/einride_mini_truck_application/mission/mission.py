@@ -24,7 +24,9 @@ class Action:
 
 
 class Mission:
-    def __init__(self, retry_delay: float = 2.0, redock_after: float = 0.0) -> None:
+    # 0.5 s: a failed attempt already stopped the robot; waiting longer only
+    # looked like hesitation (2 s, 2026-10-03).
+    def __init__(self, retry_delay: float = 0.5, redock_after: float = 0.0) -> None:
         self.retry_delay = retry_delay
         # Seconds docked while Saga still asks for this same dock before trying
         # again. 0 (default) disables it: on the real server an organizer
