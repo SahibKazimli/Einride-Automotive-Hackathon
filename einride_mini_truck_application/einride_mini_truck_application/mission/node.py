@@ -35,9 +35,11 @@ from std_msgs.msg import Int32, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from .mission import Mission
-from .staging import choose_staging, Grid, load_dock_poses, Pose
+from .staging import choose_staging, Grid, load_dock_poses, Pose, turn_to_tag
 
 DOCK_TYPE = 'competition_dock'
+# Smaller turns are not worth a Spin: the tag is then already near image centre.
+MIN_FACE_TURN = math.radians(10.0)
 
 
 class MissionIO(Node):
@@ -89,6 +91,16 @@ class MissionIO(Node):
         c, s = math.cos(rot), math.sin(rot)
         return (t.x + c * x - s * y, t.y + s * x + c * y, yaw + rot)
 
+    def robot_pose(self) -> Pose | None:
+        """base_footprint in the costmap's frame, None if TF is not there yet."""
+        try:
+            tf = self.tf_buffer.lookup_transform(self.grid_frame, 'base_footprint', Time())
+        except TransformException:
+            return None
+        t, q = tf.transform.translation, tf.transform.rotation
+        yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+        return (t.x, t.y, yaw)
+
     def pose_msg(self, pose: Pose) -> PoseStamped:
         msg = PoseStamped()
         msg.header.frame_id = self.grid_frame
@@ -115,7 +127,7 @@ def main(args: list[str] | None = None) -> None:
     log = io.get_logger()
     mission = Mission()
     period = io.get_parameter('tick_period').value
-    task = None        # None, 'staging' (NavigateToPose), 'dock' or 'undock'
+    task = None        # None, 'staging' (NavigateToPose), 'face' (Spin), 'dock' or 'undock'
     target = None      # tag of the running dock attempt
     rejected = False   # Nav2 refused / no staging pose: report as a failed task
     staging = None     # staging pose of the running dock attempt
@@ -170,12 +182,23 @@ def main(args: list[str] | None = None) -> None:
                     rejected = task is None
                     retried = False
                 elif task == 'dock' and not succeeded and not retried and lost_tag(nav):
-                    # The tag dropped out mid-approach. The robot is near the dock
-                    # and facing it, so try again from here before driving off to
-                    # another staging pose (that turn-away-and-back looked erratic,
-                    # run_2137 2026-10-03).
-                    log.warn(f'Lost tag {target} while docking; retrying from here')
+                    # The tag dropped out mid-approach. The robot is near the dock,
+                    # so try again from here before driving off to another staging
+                    # pose (that turn-away-and-back looked erratic, run_2137). The
+                    # approach curve can leave the tag outside the camera's view
+                    # (run_2226, 2026-10-03), so first turn to face where it is.
                     retried = True
+                    robot, dock = io.robot_pose(), io.dock_in_grid_frame(target)
+                    turn = turn_to_tag(robot, dock) if robot and dock else 0.0
+                    log.warn(f'Lost tag {target} while docking; turning '
+                             f'{math.degrees(turn):.0f} deg to it and retrying from here')
+                    if abs(turn) >= MIN_FACE_TURN and nav.spin(spin_dist=turn):
+                        task = 'face'
+                    else:
+                        task = 'dock' if nav.dockRobotByID(f'dock_{target}',
+                                                           nav_to_dock=False) else None
+                        rejected = task is None
+                elif task == 'face':   # turned (or could not): dock from here
                     task = 'dock' if nav.dockRobotByID(f'dock_{target}', nav_to_dock=False) \
                         else None
                     rejected = task is None

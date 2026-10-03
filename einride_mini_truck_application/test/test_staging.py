@@ -5,7 +5,7 @@ import os
 
 from einride_mini_truck_application.mission.staging import (
     candidates, choose_staging, footprint_free, Grid, lane_free, load_dock_poses,
-    MAX_VIEW_ANGLE, TIGHT_MARGIN, view_angle, with_shadows)
+    MAX_VIEW_ANGLE, TIGHT_MARGIN, turn_to_tag, view_angle, with_shadows)
 import pytest
 
 HOME = os.path.join(os.path.dirname(__file__), '..', 'config', 'docks', 'home.yaml')
@@ -151,3 +151,12 @@ def test_lane_does_not_cross_the_unseen_back_of_a_bucket() -> None:
 def test_shadows_leave_seen_cells_alone() -> None:
     grid = grid_with([(1.0, 0.0, 0.1)])
     assert with_shadows(grid).data == grid.data
+
+
+def test_turn_to_tag() -> None:
+    tag_x = DOCK_G[0] + 0.326
+    assert turn_to_tag((1.0, 0.0, 0.0), DOCK_G) == pytest.approx(0.0)
+    # run_2226: stood beside the dock facing away from the tag -> turn right.
+    robot = (1.42, 0.30, 0.3)
+    assert turn_to_tag(robot, DOCK_G) == pytest.approx(math.atan2(-0.30, tag_x - 1.42) - 0.3)
+    assert abs(turn_to_tag((1.0, 0.0, math.pi), DOCK_G)) == pytest.approx(math.pi)

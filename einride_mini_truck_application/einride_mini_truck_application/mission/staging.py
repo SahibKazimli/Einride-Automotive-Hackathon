@@ -135,6 +135,13 @@ def view_angle(pose: Pose, dock: Pose) -> float:
     return abs(math.remainder(seen_from - (yaw + math.pi), math.tau))
 
 
+def turn_to_tag(robot: Pose, dock: Pose) -> float:
+    """Signed turn (rad, + = left) that points `robot` at the tag of `dock`."""
+    x, y, yaw = dock
+    tx, ty = x + TAG_DISTANCE * math.cos(yaw), y + TAG_DISTANCE * math.sin(yaw)
+    return math.remainder(math.atan2(ty - robot[1], tx - robot[0]) - robot[2], math.tau)
+
+
 def candidates(dock: Pose, distances: Sequence[float] = DISTANCES,
                laterals: Sequence[float] = LATERALS) -> list[Pose]:
     """Staging poses around `dock`, each facing the docked position.
