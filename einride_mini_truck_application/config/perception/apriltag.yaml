@@ -9,7 +9,10 @@ apriltag:
     # black square on it is 100 mm. Measure your prints: a wrong size gives
     # wrong distances.
     size: 0.100
-    max_hamming: 0          # reject any tag with bit errors (no false docks)
+    # Bit errors to correct per tag. tag36h11 codes differ in at least 11 bits,
+    # so fixing 2 is still safe from false ids, and it helps with glare or a
+    # screen-displayed tag (was 0: any single misread bit dropped the tag).
+    max_hamming: 2
     pose_estimation_method: "pnp"
     detector:
       threads: 2
