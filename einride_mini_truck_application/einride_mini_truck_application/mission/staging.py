@@ -9,7 +9,13 @@ then routes there around obstacles, and docking runs without its own staging.
 
 Grid values follow nav_msgs/OccupancyGrid as published by Nav2's costmap:
 100 = lethal (an obstacle cell), 99 = inscribed, lower = inflation or free,
--1 = unknown (treated as free; the arena has no map).
+-1 = unknown (needs track_unknown_space: true in the global costmap).
+
+A 2D lidar only sees the near face of an obstacle; the space behind it stays
+unknown. The staging pose itself must therefore be on cells the lidar has
+actually seen free, or it can land "behind" (in reality inside) a bucket
+(2026-10-03). The lane to the dock only avoids obstacle cells: near the dock
+much is unseen, and the docking server checks the approach itself.
 """
 
 import math
@@ -28,7 +34,7 @@ LETHAL = 100
 
 # Tried in this order: straight in front first, nominal distance first.
 DISTANCES = (0.7, 0.6, 0.5, 0.4)
-LATERALS = (0.0, 0.15, -0.15, 0.3, -0.3)
+LATERALS = (0.0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45)   # 0.45: around a ~0.3 m bucket
 # The last part of the lane next to the dock is ignored: the dock's own walls
 # and the tag holder are there (matches docking_server dock_collision_threshold).
 DOCK_CLEARANCE = 0.4
@@ -60,8 +66,12 @@ class Grid:
         return self.data[iy * self.width + ix]
 
 
-def footprint_free(grid: Grid, pose: Pose, margin: float = MARGIN) -> bool:
-    """True if no lethal cell lies under the robot outline (+ margin) at `pose`."""
+def footprint_free(grid: Grid, pose: Pose, margin: float = MARGIN,
+                   unknown_blocks: bool = False) -> bool:
+    """True if no lethal cell lies under the robot outline (+ margin) at `pose`.
+
+    `unknown_blocks`: also refuse cells never seen by the lidar (-1).
+    """
     x, y, yaw = pose
     c, s = math.cos(yaw), math.sin(yaw)
     hl, hw = HALF_LENGTH + margin, HALF_WIDTH + margin
@@ -71,7 +81,8 @@ def footprint_free(grid: Grid, pose: Pose, margin: float = MARGIN) -> bool:
         for j in range(ny + 1):
             lx = -hl + 2 * hl * i / nx
             ly = -hw + 2 * hw * j / ny
-            if grid.cost(x + c * lx - s * ly, y + s * lx + c * ly) >= LETHAL:
+            cost = grid.cost(x + c * lx - s * ly, y + s * lx + c * ly)
+            if cost >= LETHAL or (unknown_blocks and cost < 0):
                 return False
     return True
 
@@ -122,6 +133,6 @@ def choose_staging(grid: Optional[Grid], dock: Pose,
     if grid is None:
         return poses[0] if poses else None
     for pose in poses:
-        if footprint_free(grid, pose) and lane_free(grid, pose, dock):
+        if footprint_free(grid, pose, unknown_blocks=True) and lane_free(grid, pose, dock):
             return pose
     return None

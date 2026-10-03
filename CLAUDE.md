@@ -70,6 +70,7 @@ Finals: 2026-10-09. ROS 2 Jazzy on a Jetson Orin Nano. Our code is the
   - Next: run with b6ebfa2+ on the robot, check the `Staging for tag 6` line,
     then while docked: Saga `arrived_at_source`, `loading_complete`, switch the
     screen to tag 2, then `arrived_at_destination`, `unloading_complete`.
+- Docking failure analysis and fix directions: `docs/docking-investigation.md`.
 - Later / open:
   - Replace the staging grid math with nav2_simple_commander's `PyCostmap2D`
     + `FootprintCollisionChecker`; derive candidate distances from

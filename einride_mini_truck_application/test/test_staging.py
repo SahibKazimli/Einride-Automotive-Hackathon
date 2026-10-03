@@ -43,6 +43,22 @@ def test_bucket_on_nominal_spot_moves_staging() -> None:
     assert pose[2] == pytest.approx(math.atan2(-pose[1], DOCK_G[0] - pose[0]))
 
 
+def test_lidar_shadow_behind_bucket_is_not_staging() -> None:
+    """2026-10-03: lidar saw only the bucket's front face; the spot behind it
+    looked free and was chosen. Unseen cells (-1) must not hold the robot."""
+    grid = grid_with([(0.95, 0.0, 0.05)])           # the visible front face
+    for i, (iy, ix) in enumerate((iy, ix) for iy in range(grid.height)
+                                 for ix in range(grid.width)):
+        x = grid.origin_x + (ix + 0.5) * grid.resolution
+        y = grid.origin_y + (iy + 0.5) * grid.resolution
+        if 1.0 < x < 1.4 and abs(y) < 0.1 and grid.data[i] == 0:
+            grid.data[i] = -1                       # shadow behind it
+    pose = choose_staging(grid, DOCK_G)
+    assert pose is not None
+    assert footprint_free(grid, pose, unknown_blocks=True)
+    assert abs(pose[1]) >= 0.3                      # beside the shadow, not in it
+
+
 def test_dock_fully_blocked() -> None:
     """Something parked right in the bay: no staging pose, wait instead."""
     assert choose_staging(grid_with([(1.45, 0.0, 0.5)]), DOCK_G) is None
