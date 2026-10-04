@@ -15,6 +15,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
+from launch.conditions import UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
@@ -43,15 +44,20 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('start_x', default_value='0.0'),
         DeclareLaunchArgument('start_y', default_value='0.0'),
         DeclareLaunchArgument('start_yaw', default_value='0.0'),
+        DeclareLaunchArgument('use_slam_map', default_value='false',
+                              description='SLAM publishes map->odom; omit arena->odom'),
 
         # Dock poses are written in the "arena" frame; odom starts where the
-        # robot was switched on, so arena -> odom is the start pose.
+        # robot was switched on, so arena -> odom is the start pose. When SLAM
+        # is active it publishes map -> odom instead; do not give odom two
+        # competing world parents.
         Node(package='tf2_ros', executable='static_transform_publisher',
              name='arena_to_odom',
              arguments=['--x', LaunchConfiguration('start_x'),
                         '--y', LaunchConfiguration('start_y'),
                         '--yaw', LaunchConfiguration('start_yaw'),
-                        '--frame-id', 'arena', '--child-frame-id', 'odom']),
+                        '--frame-id', 'arena', '--child-frame-id', 'odom'],
+             condition=UnlessCondition(LaunchConfiguration('use_slam_map'))),
 
         # /scan without the points that hit the robot itself -> /scan_filtered.
         Node(package='laser_filters', executable='scan_to_scan_filter_chain',

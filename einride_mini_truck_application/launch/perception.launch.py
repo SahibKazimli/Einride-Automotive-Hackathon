@@ -21,12 +21,15 @@ from launch.actions import DeclareLaunchArgument
 from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description() -> LaunchDescription:
     share = get_package_share_directory('einride_mini_truck_application')
     apriltag_params = os.path.join(share, 'config', 'perception', 'apriltag.yaml')
     rectify = LaunchConfiguration('rectify')
+    survey_mode = LaunchConfiguration('survey_mode')
+    survey_output = LaunchConfiguration('survey_output')
     docks = PathJoinSubstitution(
         [share, 'config', 'docks', [LaunchConfiguration('layout'), '.yaml']])
 
@@ -40,6 +43,8 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         DeclareLaunchArgument('rectify', default_value='false'),
         DeclareLaunchArgument('layout', default_value='home'),
+        DeclareLaunchArgument('survey_mode', default_value='false'),
+        DeclareLaunchArgument('survey_output', default_value='~/.ros/arena_tag_survey.yaml'),
         Node(package='image_proc', executable='rectify_node', name='rectify_color',
              output='screen', condition=IfCondition(rectify),
              remappings=[('image', '/dock_camera/image_raw'),
@@ -47,5 +52,10 @@ def generate_launch_description() -> LaunchDescription:
         apriltag('/dock_camera/image_rect', IfCondition(rectify)),
         apriltag('/dock_camera/image_raw', UnlessCondition(rectify)),
         Node(package='einride_mini_truck_application', executable='dock_pose',
-             output='screen', parameters=[{'dock_database': docks}]),
+             output='screen', parameters=[
+                 {'dock_database': docks,
+                  'survey_mode': ParameterValue(survey_mode, value_type=bool)}]),
+        Node(package='einride_mini_truck_application', executable='tag_survey',
+             output='screen', condition=IfCondition(survey_mode),
+             parameters=[{'output_file': survey_output}]),
     ])

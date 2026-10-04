@@ -44,6 +44,7 @@ class DockPoseNode(Node):
         self.prefix = self.get_parameter('tag_frame_prefix').value
         # Seconds a tag TF may lag its detection and still count as that sighting.
         self.max_age = self.declare_parameter('max_tf_age', 2.0).value
+        self.survey_mode = self.declare_parameter('survey_mode', False).value
         self.target = -1
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -74,21 +75,23 @@ class DockPoseNode(Node):
         self.target = msg.data
 
     def update_gate(self) -> None:
-        if self.target < 0:
-            dock = None
-        elif self.docks:
-            dock = self.docks.get(self.target)
+        if self.survey_mode:
+            is_open = True
+        elif self.target < 0:
+            is_open = False
+        elif not self.docks:
+            is_open = True
         else:
-            dock = (0.0, 0.0)   # no layout known: treat every target as near
-        robot = None
-        if dock is not None and self.docks:
-            try:
-                tf = self.tf_buffer.lookup_transform(self.dock_frame, self.base_frame, Time())
-                robot = (tf.transform.translation.x, tf.transform.translation.y)
-            except TransformException:
-                pass
+            dock = self.docks.get(self.target)
+            robot = None
+            if dock is not None:
+                try:
+                    tf = self.tf_buffer.lookup_transform(self.dock_frame, self.base_frame, Time())
+                    robot = (tf.transform.translation.x, tf.transform.translation.y)
+                except TransformException:
+                    pass
+            is_open = self.gate.update(robot, dock)
         was_open = self.gate.open
-        is_open = self.gate.update(robot, dock) if self.docks else dock is not None
         self.gate.open = is_open
         if is_open == was_open:
             return
@@ -99,7 +102,9 @@ class DockPoseNode(Node):
                                          qos_profile_sensor_data, raw=True),
                 self.create_subscription(CameraInfo, '/oak/rgb/camera_info', self.info_pub.publish,
                                          qos_profile_sensor_data, raw=True)]
-            self.get_logger().info(f'Near dock of tag {self.target}: tag detection on')
+            message = 'Tag survey: detection on' if self.survey_mode else (
+                f'Near dock of tag {self.target}: tag detection on')
+            self.get_logger().info(message)
         else:
             for sub in self.camera_subs:
                 self.destroy_subscription(sub)
@@ -114,6 +119,8 @@ class DockPoseNode(Node):
         self.image_pub.publish(data)
 
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
+        if self.survey_mode:
+            return   # the survey node records every tag; no docking pose is needed
         if self.target < 0 or not any(d.id == self.target for d in msg.detections):
             return
         frame = f'{self.prefix}{self.target}'
