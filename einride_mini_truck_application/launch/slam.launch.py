@@ -1,13 +1,17 @@
 """SLAM (slam_toolbox): build a LiDAR map of the arena, or localize against one.
 
-    # 1. build a map while you drive the robot around:
-    ros2 launch einride_mini_truck_application slam.launch.py mode:=mapping use_sim_time:=true
+    # 1. build a map while you drive the robot around. Start the robot (and the
+    #    app, which starts odom) on the competition start spot: the map's origin
+    #    is where mapping starts, and app.launch.py slam:=true relies on that.
+    ros2 launch einride_mini_truck_application slam.launch.py mode:=mapping
     #    ...then save it (writes maps/arena.posegraph + maps/arena.data):
+    MAP=~/ws/src/Einride-Automotive-Hackathon/einride_mini_truck_application/maps/arena
     ros2 service call /slam_toolbox/serialize_map slam_toolbox/srv/SerializePoseGraph \
-        "{filename: '/einride_mini_truck_ws/src/einride_mini_truck_application/maps/arena'}"
+        "{filename: '$MAP'}"
 
-    # 2. localize against the saved map (architecture "version 4"):
-    ros2 launch einride_mini_truck_application slam.launch.py mode:=localization use_sim_time:=true
+    # 2. localize against the saved map (architecture "version 4"). Normally
+    #    started by app.launch.py slam:=true; map_file is the path saved above.
+    ros2 launch einride_mini_truck_application slam.launch.py mode:=localization
 
 slam_toolbox publishes map -> odom. odom -> base_footprint still comes from
 Gazebo's DiffDrive (sim) or the EKF (hardware), so SLAM only ADDS the global
@@ -49,10 +53,14 @@ def generate_launch_description() -> LaunchDescription:
          localisation_yaml, "'"])
     use_sim_time = {'use_sim_time': ParameterValue(
         LaunchConfiguration('use_sim_time'), value_type=bool)}
+    # Only localization loads a saved map; an empty name makes mapping start fresh.
+    map_file = {'map_file_name': ParameterValue(PythonExpression(
+        ["'", LaunchConfiguration('map_file'), "' if '", mode, "' == 'localization' else ''"]),
+        value_type=str)}
 
     slam = LifecycleNode(
         package='slam_toolbox', executable=executable, name='slam_toolbox',
-        namespace='', output='screen', parameters=[config, use_sim_time])
+        namespace='', output='screen', parameters=[config, use_sim_time, map_file])
 
     # Drive the lifecycle automatically: configure now, and activate as soon as
     # configuring succeeds (reaches the 'inactive' state).
@@ -70,6 +78,11 @@ def generate_launch_description() -> LaunchDescription:
                               description='mapping | localization'),
         DeclareLaunchArgument('use_sim_time', default_value='false',
                               description='true against the simulation.'),
+        DeclareLaunchArgument(
+            'map_file',
+            default_value=os.path.expanduser(
+                '~/ws/src/Einride-Automotive-Hackathon/einride_mini_truck_application/maps/arena'),
+            description='saved pose graph to localize against, without extension'),
         slam,
         configure,
         activate,

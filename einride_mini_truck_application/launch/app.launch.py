@@ -3,8 +3,10 @@
     ros2 launch einride_mini_truck_application app.launch.py
     ros2 launch einride_mini_truck_application app.launch.py layout:=arena start_x:=0.0 start_y:=0.0
     ros2 launch einride_mini_truck_application app.launch.py mission:=false   # no Saga/mission
+    ros2 launch einride_mini_truck_application app.launch.py layout:=arena slam:=true
+        # localize against the saved SLAM map (maps/arena); see slam.launch.py
     ros2 launch einride_mini_truck_application app.launch.py mission:=false \
-        tag_survey:=true use_slam_map:=true  # precompetition tag survey
+        tag_survey:=true slam:=true  # precompetition tag survey
 
 Saga settings come from config/saga/saga.secret.yaml if it exists, else
 saga.example.yaml.
@@ -24,10 +26,10 @@ from launch_ros.actions import Node
 def generate_launch_description() -> LaunchDescription:
     share = get_package_share_directory('einride_mini_truck_application')
 
-    def include(name: str, **arguments) -> IncludeLaunchDescription:
+    def include(name: str, condition=None, **arguments) -> IncludeLaunchDescription:
         return IncludeLaunchDescription(
             PythonLaunchDescriptionSource(os.path.join(share, 'launch', name)),
-            launch_arguments=arguments.items())
+            launch_arguments=arguments.items(), condition=condition)
 
     saga_dir = os.path.join(share, 'config', 'saga')
     saga_params = os.path.join(saga_dir, 'saga.secret.yaml')
@@ -55,10 +57,20 @@ def generate_launch_description() -> LaunchDescription:
                 '~/ws/src/Einride-Automotive-Hackathon/'
                 'einride_mini_truck_application/config/docks/arena_tag_survey.yaml'),
             description='file written by the AprilTag survey save service'),
-        DeclareLaunchArgument('use_slam_map', default_value='false',
-                              description='SLAM publishes map->odom; omit arena->odom'),
+        DeclareLaunchArgument('slam', default_value='false',
+                              description='localize against the saved SLAM map'),
+        DeclareLaunchArgument(
+            'map_file',
+            default_value=os.path.expanduser(
+                '~/ws/src/Einride-Automotive-Hackathon/einride_mini_truck_application/maps/arena'),
+            description='saved SLAM pose graph, without extension'),
+        # true when slam_toolbox is started separately (slam.launch.py).
+        DeclareLaunchArgument('use_slam_map', default_value=LaunchConfiguration('slam'),
+                              description='SLAM publishes map->odom; hang arena on map'),
 
         include('localization.launch.py'),
+        include('slam.launch.py', condition=IfCondition(LaunchConfiguration('slam')),
+                mode='localization', map_file=LaunchConfiguration('map_file')),
         include('perception.launch.py', rectify=LaunchConfiguration('rectify'),
                 layout=LaunchConfiguration('layout'),
                 survey_mode=LaunchConfiguration('tag_survey'),

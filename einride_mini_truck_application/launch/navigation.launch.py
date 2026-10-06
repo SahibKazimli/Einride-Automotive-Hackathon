@@ -8,6 +8,7 @@ Started node by node instead of through nav2_bringup so that:
 Arguments
     layout     home | arena: which config/docks/<layout>.yaml to use
     start_x, start_y, start_yaw: robot start pose in that layout's frame
+    use_slam_map  true when slam_toolbox localizes (app.launch.py slam:=true)
 """
 
 import os
@@ -15,7 +16,7 @@ import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
-from launch.conditions import UnlessCondition
+from launch.conditions import IfCondition, UnlessCondition
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 
@@ -45,12 +46,13 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('start_y', default_value='0.0'),
         DeclareLaunchArgument('start_yaw', default_value='0.0'),
         DeclareLaunchArgument('use_slam_map', default_value='false',
-                              description='SLAM publishes map->odom; omit arena->odom'),
+                              description='SLAM publishes map->odom; hang arena on map'),
 
-        # Dock poses are written in the "arena" frame; odom starts where the
-        # robot was switched on, so arena -> odom is the start pose. When SLAM
-        # is active it publishes map -> odom instead; do not give odom two
-        # competing world parents.
+        # Dock poses are written in the "arena" frame. Without SLAM, odom starts
+        # where the robot was switched on, so arena -> odom is the start pose.
+        # With SLAM, slam_toolbox owns map -> odom and the map's origin is where
+        # mapping started (the start spot), so arena -> map is the start pose.
+        # Either way odom has one parent.
         Node(package='tf2_ros', executable='static_transform_publisher',
              name='arena_to_odom',
              arguments=['--x', LaunchConfiguration('start_x'),
@@ -58,6 +60,13 @@ def generate_launch_description() -> LaunchDescription:
                         '--yaw', LaunchConfiguration('start_yaw'),
                         '--frame-id', 'arena', '--child-frame-id', 'odom'],
              condition=UnlessCondition(LaunchConfiguration('use_slam_map'))),
+        Node(package='tf2_ros', executable='static_transform_publisher',
+             name='arena_to_map',
+             arguments=['--x', LaunchConfiguration('start_x'),
+                        '--y', LaunchConfiguration('start_y'),
+                        '--yaw', LaunchConfiguration('start_yaw'),
+                        '--frame-id', 'arena', '--child-frame-id', 'map'],
+             condition=IfCondition(LaunchConfiguration('use_slam_map'))),
 
         # /scan without the points that hit the robot itself -> /scan_filtered.
         Node(package='laser_filters', executable='scan_to_scan_filter_chain',

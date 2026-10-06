@@ -12,8 +12,9 @@ slam_toolbox:
     base_frame: base_footprint
     scan_topic: /scan
 
-    # The saved pose graph (maps/arena.posegraph + .data), WITHOUT extension.
-    map_file_name: /home/jetson/ws/src/Einride-Automotive-Hackathon/einride_mini_truck_application/maps/arena
+    # map_file_name (the saved maps/arena.posegraph + .data, without extension)
+    # is set by launch/slam.launch.py, argument map_file.
+    # Start where mapping started (the map origin); otherwise publish /initialpose.
     map_start_pose: [0.0, 0.0, 0.0]
     map_start_at_dock: false
 
