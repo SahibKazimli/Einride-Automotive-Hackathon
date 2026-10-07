@@ -73,9 +73,16 @@ class WheelSpeed:
 class GyroBias:
     """Running estimate of the gyro's z bias, updated only while standing still."""
 
-    def __init__(self, startup_samples: int = 200, alpha: float = 0.005) -> None:
+    def __init__(self, startup_samples: int = 200, alpha: float = 0.005,
+                 max_still_rate: float = 0.05) -> None:
         self.startup_samples = startup_samples
         self.alpha = alpha
+        #: Above this |rate - bias| (rad/s) the robot is turning, whatever the
+        #: wheels say. The encoders tick per centimetre, so a slow turn in place
+        #: (0.35 rad/s, ~3.5 cm/s per wheel) has gaps of ~0.3 s between ticks:
+        #: wheels-only "still" then zeroed real rotation and learned it as bias
+        #: (92 deg of heading lost in one lap, 2026-10-07).
+        self.max_still_rate = max_still_rate
         self.bias = 0.0
         self.count = 0
 
@@ -84,8 +91,11 @@ class GyroBias:
         return self.count >= self.startup_samples
 
     def update(self, rate: float, still: bool) -> float:
-        """Feed one raw z rate; return it with the bias removed (0 when still)."""
-        if still:
+        """Feed one raw z rate; return it with the bias removed (0 when still).
+
+        `still` is what the wheels say; a gyro clearly showing rotation overrides it.
+        """
+        if still and abs(rate - self.bias) <= self.max_still_rate:
             self.count += 1
             if self.count <= self.startup_samples:
                 self.bias += (rate - self.bias) / self.count   # plain mean at startup
