@@ -18,15 +18,46 @@ collision_monitor:
     base_shift_correction: True
     stop_pub_timeout: 2.0
     polygons: ["PolygonStop", "PolygonSlow"]
-    # Stop: anything within 8 cm of the front or back, or 1.5 cm of the sides.
+    # Stop: anything within 8 cm of the front or back, or 1.5 cm of the sides,
+    # but only on the side the robot is moving toward. A box all around blocked
+    # every command once an obstacle was inside it, even backing away from it
+    # (2026-10-07). The sub-polygon is picked from the commanded velocity; the
+    # first match wins. The smoother ramps in 0.05 m/s steps (nav2.yaml), so
+    # any real drive command is outside the +-0.01 "turning" band.
     PolygonStop:
-      type: "polygon"
-      points: "[[0.206, 0.13], [0.206, -0.13], [-0.206, -0.13], [-0.206, 0.13]]"
+      type: "velocity_polygon"
       action_type: "stop"
       min_points: 3            # ignore single noisy lidar returns
       visualize: True
       polygon_pub_topic: "polygon_stop"
       enabled: True
+      holonomic: false
+      velocity_polygons: ["turning", "forward", "backward", "stopped"]
+      # Turning in place: the corners swing round, keep the whole box.
+      turning:
+        points: "[[0.206, 0.13], [0.206, -0.13], [-0.206, -0.13], [-0.206, 0.13]]"
+        linear_min: -0.01
+        linear_max: 0.01
+        theta_min: -3.0
+        theta_max: 3.0
+      forward:   # front half only
+        points: "[[0.206, 0.13], [0.206, -0.13], [0.0, -0.13], [0.0, 0.13]]"
+        linear_min: 0.0
+        linear_max: 1.0
+        theta_min: -3.0
+        theta_max: 3.0
+      backward:  # back half only: backing away from something in front works
+        points: "[[0.0, 0.13], [0.0, -0.13], [-0.206, -0.13], [-0.206, 0.13]]"
+        linear_min: -1.0
+        linear_max: 0.0
+        theta_min: -3.0
+        theta_max: 3.0
+      stopped:   # catch-all, must cover every velocity
+        points: "[[0.206, 0.13], [0.206, -0.13], [-0.206, -0.13], [-0.206, 0.13]]"
+        linear_min: -1.0
+        linear_max: 1.0
+        theta_min: -3.0
+        theta_max: 3.0
     # Something within ~30 cm ahead: cap forward speed, but leave turning alone.
     # "slowdown" scaled turning too, and a weakened turn in place next to an
     # obstacle could not move the skid-steer robot at all (bucket test,
