@@ -31,6 +31,7 @@ from std_msgs.msg import Int32
 from tf2_ros import Buffer, TransformException, TransformListener
 from tf_transformations import quaternion_from_euler, quaternion_matrix
 
+from ..mission.staging import load_dock_frame
 from .camera_gate import CameraGate, load_dock_positions
 from .dock_pose import docked_pose
 
@@ -56,7 +57,9 @@ class DockPoseNode(Node):
         p = self.declare_parameter
         database = p('dock_database', '').value
         self.docks = load_dock_positions(database) if database else {}
-        self.dock_frame = p('dock_frame', 'arena').value
+        # The dock file names its frame (arena, or map for a tag survey).
+        default_frame = p('dock_frame', 'arena').value
+        self.dock_frame = (load_dock_frame(database) if database else None) or default_frame
         self.gate = CameraGate(p('gate_on_distance', 1.6).value,
                                p('gate_off_distance', 1.9).value)
         self.min_image_period = 1.0 / p('max_image_rate', 10.0).value

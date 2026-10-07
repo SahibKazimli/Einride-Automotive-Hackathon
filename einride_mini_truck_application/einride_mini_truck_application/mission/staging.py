@@ -68,6 +68,19 @@ def load_dock_poses(path: str) -> dict[int, Pose]:
             for d in (data.get('docks') or {}).values()}
 
 
+def load_dock_frame(path: str) -> Optional[str]:
+    """The frame the docks in a dock database are given in, None if none say.
+
+    Hand-written layouts use `arena`, the tag survey writes `map`.
+    """
+    with open(path) as f:
+        data = yaml.safe_load(f) or {}
+    frames = {d['frame'] for d in (data.get('docks') or {}).values() if 'frame' in d}
+    if len(frames) > 1:
+        raise ValueError(f'{path}: docks in several frames {sorted(frames)}')
+    return frames.pop() if frames else None
+
+
 @dataclass
 class Grid:
     """An axis-aligned occupancy grid (Nav2 costmaps are never rotated)."""

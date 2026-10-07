@@ -35,7 +35,7 @@ from std_msgs.msg import Int32, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from .mission import Mission
-from .staging import choose_staging, Grid, load_dock_poses, Pose, turn_to_tag
+from .staging import choose_staging, Grid, load_dock_frame, load_dock_poses, Pose, turn_to_tag
 
 DOCK_TYPE = 'competition_dock'
 # Smaller turns are not worth a Spin: the tag is then already near image centre.
@@ -49,7 +49,9 @@ class MissionIO(Node):
         super().__init__('mission')
         self.declare_parameter('tick_period', 0.2)
         database = self.declare_parameter('dock_database', '').value
-        self.dock_frame = self.declare_parameter('dock_frame', 'arena').value
+        # The dock file names its frame (arena, or map for a tag survey).
+        default_frame = self.declare_parameter('dock_frame', 'arena').value
+        self.dock_frame = (load_dock_frame(database) if database else None) or default_frame
         self.docks = load_dock_poses(database) if database else {}
         if not self.docks:
             self.get_logger().warn('No dock_database: using the docking server staging pose')
