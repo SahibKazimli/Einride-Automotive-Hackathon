@@ -1,0 +1,144 @@
+# Dock database from the AprilTag survey (tag_survey). `pose` is the
+# docked base_footprint pose, 0.326 m in front of the tag, facing it.
+# `tags.*.pose` is now the physical AprilTag pose, not the docking pose.
+# Only valid with the SLAM map it was surveyed on (slam:=true).
+#   dock_0 (A): 76 observations
+#   dock_1 (B): 124 observations
+#   dock_2 (C): 52 observations
+#   dock_3 (D): 54 observations
+#   dock_4 (E): 79 observations
+#   dock_5 (F): 47 observations
+#   dock_6 (G): 34 observations
+#   dock_7 (H): 140 observations
+frame: map
+docks:
+  dock_0:
+    type: competition_dock
+    frame: map
+    pose:
+    - -1.1988
+    - 0.0217
+    - 1.5739
+    id: '0'
+  dock_1:
+    type: competition_dock
+    frame: map
+    pose:
+    - 1.2396
+    - -1.0107
+    - 1.6361
+    id: '1'
+  dock_2:
+    type: competition_dock
+    frame: map
+    pose:
+    - 0.0091
+    - -1.2162
+    - 1.5516
+    id: '2'
+  dock_3:
+    type: competition_dock
+    frame: map
+    pose:
+    - 0.5442
+    - -0.9858
+    - -3.1276
+    id: '3'
+  dock_4:
+    type: competition_dock
+    frame: map
+    pose:
+    - -0.9087
+    - -1.7365
+    - -1.4872
+    id: '4'
+  dock_5:
+    type: competition_dock
+    frame: map
+    pose:
+    - -1.8746
+    - -1.118
+    - -1.6459
+    id: '5'
+  dock_6:
+    type: competition_dock
+    frame: map
+    pose:
+    - -1.085
+    - -0.523
+    - 3.0064
+    id: '6'
+  dock_7:
+    type: competition_dock
+    frame: map
+    pose:
+    - -2.1099
+    - -0.3602
+    - -0.046
+    id: '7'
+tags:
+  tag_0:
+    id: 0
+    name: A
+    pose:
+    - -1.1998
+    - 0.3472
+    - 0.0028
+    observations: 76
+  tag_1:
+    id: 1
+    name: B
+    pose:
+    - 1.2183
+    - -0.6856
+    - 0.0609
+    observations: 124
+  tag_2:
+    id: 2
+    name: C
+    pose:
+    - 0.0153
+    - -0.8912
+    - -0.0189
+    observations: 52
+  tag_3:
+    id: 3
+    name: D
+    pose:
+    - 0.2187
+    - -0.9903
+    - 1.5849
+    observations: 54
+  tag_4:
+    id: 4
+    name: E
+    pose:
+    - -0.8817
+    - -2.059
+    - -3.058
+    observations: 79
+  tag_5:
+    id: 5
+    name: F
+    pose:
+    - -1.899
+    - -1.4428
+    - 3.0653
+    observations: 47
+  tag_6:
+    id: 6
+    name: G
+    pose:
+    - -1.4075
+    - -0.4791
+    - 1.4332
+    observations: 34
+  tag_7:
+    id: 7
+    name: H
+    pose:
+    - -1.7842
+    - -0.3752
+    - -1.6171
+    observations: 140
+map_identity: d1f91cb7c887c043e2982beb7f920864b528c641c829faca158607d2c0116287
