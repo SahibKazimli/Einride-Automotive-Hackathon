@@ -30,6 +30,7 @@ def generate_launch_description() -> LaunchDescription:
     rectify = LaunchConfiguration('rectify')
     survey_mode = LaunchConfiguration('survey_mode')
     survey_output = LaunchConfiguration('survey_output')
+    survey_map_file = LaunchConfiguration('survey_map_file')
     docks = PathJoinSubstitution(
         [share, 'config', 'docks', [LaunchConfiguration('layout'), '.yaml']])
 
@@ -45,6 +46,7 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument('layout', default_value='home'),
         DeclareLaunchArgument('survey_mode', default_value='false'),
         DeclareLaunchArgument('survey_output', default_value='~/.ros/arena_tag_survey.yaml'),
+        DeclareLaunchArgument('survey_map_file', default_value=''),
         Node(package='image_proc', executable='rectify_node', name='rectify_color',
              output='screen', condition=IfCondition(rectify),
              remappings=[('image', '/dock_camera/image_raw'),
@@ -57,5 +59,5 @@ def generate_launch_description() -> LaunchDescription:
                   'survey_mode': ParameterValue(survey_mode, value_type=bool)}]),
         Node(package='einride_mini_truck_application', executable='tag_survey',
              output='screen', condition=IfCondition(survey_mode),
-             parameters=[{'output_file': survey_output}]),
+             parameters=[{'output_file': survey_output, 'map_file': survey_map_file}]),
     ])

@@ -15,6 +15,7 @@ Services
 import os
 import time
 import math
+import hashlib
 from typing import Optional
 import yaml
 
@@ -48,6 +49,8 @@ class TagSurveyNode(Node):
         self.tag_prefix = p('tag_frame_prefix', 'tag_').value
         self.output_file = os.path.expanduser(
             p('output_file', '~/.ros/arena_tag_survey.yaml').value)
+        self.map_file = os.path.expanduser(p('map_file', '').value)
+        self.map_identity = self.compute_map_identity()
         self.min_observations = int(p('min_observations', 5).value)
         self.sample_period = float(p('sample_period', 0.5).value)
         self.max_tf_age = float(p('max_tf_age', 2.0).value)
@@ -69,7 +72,32 @@ class TagSurveyNode(Node):
         self.create_subscription(AprilTagDetectionArray, '/detections', self.on_detections, 10)
         self.create_service(Trigger, '/tag_survey/save', self.save_survey)
         self.get_logger().info(
-            f'Surveying tags 0-7 on {self.map_frame}; save with /tag_survey/save')
+            f'Surveying tags 0-7 on {self.map_frame}; map identity '
+            f'{self.map_identity[:12] if self.map_identity else "unavailable"}; '
+            'save with /tag_survey/save')
+
+    def compute_map_identity(self) -> Optional[str]:
+        """Fingerprint the SLAM pose graph and data so catalogs stay map-specific."""
+        if not self.map_file:
+            return None
+        digest = hashlib.sha256()
+        map_paths = [self.map_file + suffix for suffix in ('.posegraph', '.data')]
+        missing = [path for path in map_paths if not os.path.isfile(path)]
+        if missing:
+            self.get_logger().error(
+                f'Cannot identify SLAM map; missing map files: {", ".join(missing)}')
+            return None
+        for path in map_paths:
+            suffix = os.path.splitext(path)[1]
+            digest.update(suffix.encode('utf-8'))
+            try:
+                with open(path, 'rb') as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b''):
+                        digest.update(chunk)
+            except OSError as error:
+                self.get_logger().error(f'Cannot read SLAM map file {path}: {error}')
+                return None
+        return digest.hexdigest()
 
     def tag_and_dock_on_map(self, tag_id: int, stamp) -> Optional[tuple[Pose, Pose]]:
         """Return physical tag and dock poses for this sighting in the map frame."""
@@ -107,6 +135,11 @@ class TagSurveyNode(Node):
             frame = catalog.get('frame', self.map_frame)
             if frame != self.map_frame:
                 raise ValueError(f'catalog frame is {frame!r}, expected {self.map_frame!r}')
+            stored_identity = catalog.get('map_identity')
+            if not stored_identity or stored_identity != self.map_identity:
+                raise ValueError(
+                    'catalog has no matching SLAM map identity; use a new output_file '
+                    'for this map to avoid mixing surveys')
 
             def get_tag_id(key, item):
                 raw_id = item.get('id', key.rsplit('_', 1)[-1])
@@ -143,6 +176,9 @@ class TagSurveyNode(Node):
         """Publish persistent markers for the saved physical AprilTag poses."""
         markers = MarkerArray()
         now = self.get_clock().now().to_msg()
+        if not self.map_identity or self.catalog_error:
+            self.marker_pub.publish(markers)
+            return
         for tag_id, pose in sorted(self.saved_tags.items()):
             x, y, yaw = pose
             for marker_id, marker_type in ((tag_id * 3, Marker.SPHERE),
@@ -151,7 +187,7 @@ class TagSurveyNode(Node):
                 marker = Marker()
                 marker.header.frame_id = self.map_frame
                 marker.header.stamp = now
-                marker.ns = 'saved_apriltags'
+                marker.ns = f'tag_{NAMES[tag_id]}'
                 marker.id = marker_id
                 marker.type = marker_type
                 marker.action = Marker.ADD
@@ -168,7 +204,7 @@ class TagSurveyNode(Node):
                 if marker_type == Marker.ARROW:
                     marker.scale.x, marker.scale.y, marker.scale.z = (0.22, 0.035, 0.035)
                 if marker_type == Marker.TEXT_VIEW_FACING:
-                    marker.text = f'{NAMES[tag_id]} (ID {tag_id})'
+                    marker.text = NAMES[tag_id]
                 markers.markers.append(marker)
         self.marker_pub.publish(markers)
 
@@ -195,6 +231,12 @@ class TagSurveyNode(Node):
 
     def save_survey(self, request: Trigger.Request,
                     response: Trigger.Response) -> Trigger.Response:
+        if not self.map_identity:
+            response.success = False
+            response.message = (
+                f'Cannot save tags because the SLAM map identity is unavailable for '
+                f'{self.map_file!r}; check map_file and the .posegraph/.data files.')
+            return response
         if self.catalog_error:
             response.success = False
             response.message = (f'Existing catalog could not be loaded safely: '
@@ -216,7 +258,8 @@ class TagSurveyNode(Node):
         try:
             os.makedirs(os.path.dirname(self.output_file) or '.', exist_ok=True)
             with open(self.output_file, 'w', encoding='utf-8') as out:
-                write_dock_database(out, docks, counts, self.map_frame, tags)
+                write_dock_database(out, docks, counts, self.map_frame, tags,
+                                    self.map_identity)
         except OSError as error:
             response.success = False
             response.message = f'Could not write {self.output_file}: {error}'

@@ -61,7 +61,8 @@ def summarize(samples: Sequence[Pose], min_observations: int = 5,
 
 def dock_database(docks: dict[int, Pose], frame: str,
                   tag_poses: Optional[dict[int, Pose]] = None,
-                  counts: Optional[dict[int, int]] = None) -> dict:
+                  counts: Optional[dict[int, int]] = None,
+                  map_identity: Optional[str] = None) -> dict:
     """Nav2 dock layout plus physical AprilTag poses for visualization."""
     database = {
         'frame': frame,
@@ -79,11 +80,14 @@ def dock_database(docks: dict[int, Pose], frame: str,
                 'observations': (counts or {}).get(tag, 0),
             }
             for tag, pose in sorted(tag_poses.items())}
+    if map_identity:
+        database['map_identity'] = map_identity
     return database
 
 
 def write_dock_database(out: TextIO, docks: dict[int, Pose], counts: dict[int, int],
-                        frame: str, tag_poses: Optional[dict[int, Pose]] = None) -> None:
+                        frame: str, tag_poses: Optional[dict[int, Pose]] = None,
+                        map_identity: Optional[str] = None) -> None:
     """Write dock targets and the actual observed tag poses."""
     out.write('# Dock database from the AprilTag survey (tag_survey). `pose` is the\n'
               '# docked base_footprint pose, 0.326 m in front of the tag, facing it.\n'
@@ -91,4 +95,5 @@ def write_dock_database(out: TextIO, docks: dict[int, Pose], counts: dict[int, i
               '# Only valid with the SLAM map it was surveyed on (slam:=true).\n')
     for tag in sorted(docks):
         out.write(f'#   dock_{tag} ({NAMES[tag]}): {counts.get(tag, 0)} observations\n')
-    yaml.safe_dump(dock_database(docks, frame, tag_poses, counts), out, sort_keys=False)
+    yaml.safe_dump(dock_database(docks, frame, tag_poses, counts, map_identity),
+                   out, sort_keys=False)
