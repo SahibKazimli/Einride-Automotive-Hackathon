@@ -81,6 +81,9 @@ class DockPoseNode(Node):
         self.target = msg.data
 
     def update_gate(self) -> None:
+        # CameraGate.update() mutates self.gate.open, so capture the previous
+        # state before calculating the new one or transitions will be missed.
+        was_open = self.gate.open
         if self.survey_mode:
             is_open = True
         elif self.target < 0:
@@ -97,7 +100,6 @@ class DockPoseNode(Node):
                 except TransformException:
                     pass
             is_open = self.gate.update(robot, dock)
-        was_open = self.gate.open
         self.gate.open = is_open
         if is_open == was_open:
             return
