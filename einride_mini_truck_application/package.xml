@@ -17,6 +17,7 @@
   <depend>action_msgs</depend>
   <depend>nav2_msgs</depend>
   <depend>apriltag_msgs</depend>
+  <depend>visualization_msgs</depend>
   <depend>tf_transformations</depend>
   <depend>python3-requests</depend>
 

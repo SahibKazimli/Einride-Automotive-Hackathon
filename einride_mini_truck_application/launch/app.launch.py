@@ -53,9 +53,7 @@ def generate_launch_description() -> LaunchDescription:
                               description='detect and survey all AprilTags in map frame'),
         DeclareLaunchArgument(
             'tag_survey_output',
-            default_value=os.path.expanduser(
-                '~/ws/src/Einride-Automotive-Hackathon/'
-                'einride_mini_truck_application/config/docks/arena_tag_survey.yaml'),
+            default_value=os.path.expanduser('~/.ros/arena_tag_survey.yaml'),
             description='file written by the AprilTag survey save service'),
         DeclareLaunchArgument('slam', default_value='false',
                               description='localize against the saved SLAM map'),

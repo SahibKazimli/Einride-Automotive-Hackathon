@@ -14,7 +14,9 @@ Services
 
 import os
 import time
+import math
 from typing import Optional
+import yaml
 
 from apriltag_msgs.msg import AprilTagDetectionArray
 import rclpy
@@ -24,8 +26,9 @@ from rclpy.time import Time
 from std_srvs.srv import Trigger
 from tf2_ros import Buffer, TransformException, TransformListener
 from tf_transformations import euler_from_quaternion, quaternion_matrix
+from visualization_msgs.msg import Marker, MarkerArray
 
-from .dock_pose import docked_pose
+from .dock_pose import DOCK_GAP, FRONT_OFFSET, docked_pose
 from .tag_catalog import compose, NAMES, Pose, summarize, write_dock_database
 
 
@@ -53,15 +56,23 @@ class TagSurveyNode(Node):
 
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
-        self.samples: dict[int, list[Pose]] = {}
+        self.dock_samples: dict[int, list[Pose]] = {}
+        self.tag_samples: dict[int, list[Pose]] = {}
         self.last_sample: dict[int, float] = {}
+        self.saved_docks: dict[int, Pose] = {}
+        self.saved_tags: dict[int, Pose] = {}
+        self.saved_counts: dict[int, int] = {}
+        self.catalog_error: Optional[str] = None
+        self.load_catalog()
+        self.marker_pub = self.create_publisher(MarkerArray, '/tag_survey/saved_tags', 10)
+        self.create_timer(1.0, self.publish_saved_tags)
         self.create_subscription(AprilTagDetectionArray, '/detections', self.on_detections, 10)
         self.create_service(Trigger, '/tag_survey/save', self.save_survey)
         self.get_logger().info(
             f'Surveying tags 0-7 on {self.map_frame}; save with /tag_survey/save')
 
-    def docked_on_map(self, tag_id: int, stamp) -> Optional[Pose]:
-        """Docked pose for this sighting in the map frame, None if TF is missing."""
+    def tag_and_dock_on_map(self, tag_id: int, stamp) -> Optional[tuple[Pose, Pose]]:
+        """Return physical tag and dock poses for this sighting in the map frame."""
         frame = f'{self.tag_prefix}{tag_id}'
         try:
             # Newest tag TF, as in perception/node.py: on the busy Jetson it can
@@ -80,10 +91,86 @@ class TagSurveyNode(Node):
         t, q = tag.transform.translation, tag.transform.rotation
         rotation = quaternion_matrix([q.x, q.y, q.z, q.w])[:3, :3].tolist()
         try:
-            local = docked_pose([t.x, t.y, t.z], rotation)
+            local_dock = docked_pose([t.x, t.y, t.z], rotation)
         except ValueError:
             return None
-        return compose(planar(robot.transform), local)
+        robot_on_map = planar(robot.transform)
+        return compose(robot_on_map, planar(tag.transform)), compose(robot_on_map, local_dock)
+
+    def load_catalog(self) -> None:
+        """Load prior saves so partial surveys retain existing tags and markers."""
+        if not os.path.isfile(self.output_file):
+            return
+        try:
+            with open(self.output_file, encoding='utf-8') as source:
+                catalog = yaml.safe_load(source) or {}
+            frame = catalog.get('frame', self.map_frame)
+            if frame != self.map_frame:
+                raise ValueError(f'catalog frame is {frame!r}, expected {self.map_frame!r}')
+
+            def get_tag_id(key, item):
+                raw_id = item.get('id', key.rsplit('_', 1)[-1])
+                if isinstance(raw_id, str) and raw_id.upper() in NAMES:
+                    return NAMES.index(raw_id.upper())
+                return int(raw_id)
+
+            for key, item in (catalog.get('docks') or {}).items():
+                tag_id = get_tag_id(key, item)
+                pose = item.get('pose')
+                if 0 <= tag_id < len(NAMES) and pose and len(pose) >= 3:
+                    self.saved_docks[tag_id] = tuple(float(v) for v in pose[:3])
+            for key, item in (catalog.get('tags') or {}).items():
+                tag_id = get_tag_id(key, item)
+                pose = item.get('pose')
+                if 0 <= tag_id < len(NAMES) and pose and len(pose) >= 3:
+                    self.saved_tags[tag_id] = tuple(float(v) for v in pose[:3])
+                    self.saved_counts[tag_id] = int(item.get('observations', 0))
+            # Older dock-only files have no physical tag pose; infer it from the
+            # documented 0.326 m standoff so those saved tags remain viewable.
+            for tag_id, dock in self.saved_docks.items():
+                if tag_id not in self.saved_tags:
+                    yaw = dock[2]
+                    standoff = DOCK_GAP + FRONT_OFFSET
+                    self.saved_tags[tag_id] = (
+                        dock[0] + standoff * math.cos(yaw),
+                        dock[1] + standoff * math.sin(yaw),
+                        yaw + math.pi)
+        except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError) as error:
+            self.catalog_error = str(error)
+            self.get_logger().error(f'Cannot load existing survey catalog: {error}')
+
+    def publish_saved_tags(self) -> None:
+        """Publish persistent markers for the saved physical AprilTag poses."""
+        markers = MarkerArray()
+        now = self.get_clock().now().to_msg()
+        for tag_id, pose in sorted(self.saved_tags.items()):
+            x, y, yaw = pose
+            for marker_id, marker_type in ((tag_id * 3, Marker.SPHERE),
+                                           (tag_id * 3 + 1, Marker.ARROW),
+                                           (tag_id * 3 + 2, Marker.TEXT_VIEW_FACING)):
+                marker = Marker()
+                marker.header.frame_id = self.map_frame
+                marker.header.stamp = now
+                marker.ns = 'saved_apriltags'
+                marker.id = marker_id
+                marker.type = marker_type
+                marker.action = Marker.ADD
+                marker.pose.position.x = x
+                marker.pose.position.y = y
+                marker.pose.position.z = 0.08 if marker_type != Marker.TEXT_VIEW_FACING else 0.28
+                marker.pose.orientation.z = math.sin(yaw / 2)
+                marker.pose.orientation.w = math.cos(yaw / 2)
+                marker.scale.x = 0.12 if marker_type != Marker.TEXT_VIEW_FACING else 0.0
+                marker.scale.y = 0.12 if marker_type != Marker.TEXT_VIEW_FACING else 0.0
+                marker.scale.z = 0.12 if marker_type != Marker.TEXT_VIEW_FACING else 0.16
+                marker.color.r, marker.color.g, marker.color.b, marker.color.a = (
+                    1.0, 0.55, 0.05, 1.0)
+                if marker_type == Marker.ARROW:
+                    marker.scale.x, marker.scale.y, marker.scale.z = (0.22, 0.035, 0.035)
+                if marker_type == Marker.TEXT_VIEW_FACING:
+                    marker.text = f'{NAMES[tag_id]} (ID {tag_id})'
+                markers.markers.append(marker)
+        self.marker_pub.publish(markers)
 
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
         now = time.monotonic()
@@ -92,44 +179,57 @@ class TagSurveyNode(Node):
             if not 0 <= tag_id < len(NAMES) or \
                     now - self.last_sample.get(tag_id, -1e9) < self.sample_period:
                 continue
-            pose = self.docked_on_map(tag_id, msg.header.stamp)
-            if pose is None:
+            poses = self.tag_and_dock_on_map(tag_id, msg.header.stamp)
+            if poses is None:
                 continue
-            samples = self.samples.setdefault(tag_id, [])
-            samples.append(pose)
+            tag_pose, dock_pose = poses
+            tag_samples = self.tag_samples.setdefault(tag_id, [])
+            tag_samples.append(tag_pose)
+            samples = self.dock_samples.setdefault(tag_id, [])
+            samples.append(dock_pose)
             self.last_sample[tag_id] = now
             if len(samples) == 1 or len(samples) % 10 == 0:
                 self.get_logger().info(
                     f'Tag {NAMES[tag_id]} (ID {tag_id}): {len(samples)} observations, '
-                    f'dock at ({pose[0]:.2f}, {pose[1]:.2f}) on {self.map_frame}')
+                    f'tag at ({tag_pose[0]:.2f}, {tag_pose[1]:.2f}) on {self.map_frame}')
 
     def save_survey(self, request: Trigger.Request,
                     response: Trigger.Response) -> Trigger.Response:
-        docks: dict[int, Pose] = {}
-        counts: dict[int, int] = {}
-        seen_too_little = []
-        for tag_id, samples in sorted(self.samples.items()):
-            result = summarize(samples, self.min_observations,
-                               self.max_position_error, self.max_yaw_error)
-            if result is None:
-                seen_too_little.append(NAMES[tag_id])
-            else:
-                docks[tag_id], counts[tag_id] = result
+        if self.catalog_error:
+            response.success = False
+            response.message = (f'Existing catalog could not be loaded safely: '
+                                f'{self.catalog_error}. Fix or move {self.output_file} first.')
+            return response
+        docks = dict(self.saved_docks)
+        tags = dict(self.saved_tags)
+        counts = dict(self.saved_counts)
+        newly_saved = []
+        for tag_id in range(len(NAMES)):
+            dock_result = summarize(self.dock_samples.get(tag_id, []), self.min_observations,
+                                     self.max_position_error, self.max_yaw_error)
+            tag_result = summarize(self.tag_samples.get(tag_id, []), self.min_observations,
+                                   self.max_position_error, self.max_yaw_error)
+            if dock_result is not None and tag_result is not None:
+                docks[tag_id], counts[tag_id] = dock_result
+                tags[tag_id] = tag_result[0]
+                newly_saved.append(tag_id)
         try:
             os.makedirs(os.path.dirname(self.output_file) or '.', exist_ok=True)
             with open(self.output_file, 'w', encoding='utf-8') as out:
-                write_dock_database(out, docks, counts, self.map_frame)
+                write_dock_database(out, docks, counts, self.map_frame, tags)
         except OSError as error:
             response.success = False
             response.message = f'Could not write {self.output_file}: {error}'
             return response
 
-        response.success = bool(docks)
-        saved = ', '.join(NAMES[tag] for tag in docks) or 'none'
-        response.message = f'Saved docks {saved} to {self.output_file}.'
-        if seen_too_little:
-            response.message += (f' Need at least {self.min_observations} consistent '
-                                 f'observations for: {", ".join(seen_too_little)}.')
+        self.saved_docks, self.saved_tags, self.saved_counts = docks, tags, counts
+        self.publish_saved_tags()
+        missing = [NAMES[tag] for tag in range(len(NAMES)) if tag not in docks]
+        saved_now = ', '.join(NAMES[tag] for tag in newly_saved) or 'none this call'
+        response.success = True
+        response.message = f'Saved new survey data for {saved_now}; catalog is {self.output_file}.'
+        response.message += (' Missing tags/docks: ' + ', '.join(missing) + '.'
+                             if missing else ' All tags A-H have saved docks.')
         return response
 
 

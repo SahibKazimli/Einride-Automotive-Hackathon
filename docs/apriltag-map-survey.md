@@ -70,7 +70,7 @@ adjust them if this checkout lives elsewhere.
    PKG=$HOME/ws/src/Einride-Automotive-Hackathon/einride_mini_truck_application
    ros2 launch einride_mini_truck_application app.launch.py \
      mission:=false tag_survey:=true slam:=true \
-     map_file:=$PKG/maps/room_1lap tag_survey_output:=$PKG/config/docks/room.yaml
+     map_file:=$PKG/maps/room_1lap tag_survey_output:=$HOME/.ros/room.yaml
    ```
 
    Set `PKG` in the same terminal. Always pass `map_file` (no extension):
@@ -108,8 +108,8 @@ adjust them if this checkout lives elsewhere.
    the tag, within ~1.5 m). Stand still ~10 s per tag: the camera delivers
    only a few images per second, and the survey node needs at least five
    consistent observations per tag. Watch the application
-   terminal for lines such as `Tag A (ID 0): 10 observations, dock at (x, y)`.
-   The dock position should stay put as you move; if it wanders, localization
+   terminal for lines such as `Tag A (ID 0): 10 observations, tag at (x, y)`.
+   The tag position should stay put as you move; if it wanders, localization
    is off. Press **Ctrl+C** to stop
    teleoperation when you are done driving.
 
@@ -127,18 +127,26 @@ source ~/ws/install/setup.bash
 ros2 service call /tag_survey/save std_srvs/srv/Trigger "{}"
 ```
 
-The response lists which docks were saved and which tags need more
-observations. It writes every tag that has enough, even if some are missing;
-view the missing ones and call save again. Check the file:
+The response lists newly saved tags and every dock still missing. Each save
+merges new observations into the existing catalog, so you can scan a few tags,
+save, then scan the rest. The file is written under your home directory to
+avoid permission problems in the ROS installation's `/config` directory.
+Check it:
 
 ```bash
-cat ~/ws/src/Einride-Automotive-Hackathon/einride_mini_truck_application/config/docks/room.yaml
+cat ~/.ros/room.yaml
 ```
 
-It looks like `config/docks/home.yaml`: one `dock_<id>` per tag with
-`frame: map` and `pose: [x, y, yaw]` (metres, radians), plus a comment with
-the number of observations used. Keep it with the exact map it was surveyed
-on; a new map needs a new survey.
+The file contains `docks` for Nav2 and `tags` for the physical AprilTag poses.
+`docks.*.pose` is the robot's docked pose in front of the tag;
+`tags.*.pose` is the tag's actual `[x, y, yaw]` in the map frame. Keep it with
+the exact map it was surveyed on; a new map needs a new survey.
+
+To view saved tags in Foxglove, add a 3D panel, set **Fixed frame** to `map`,
+expand **Topics**, enable `/tag_survey/saved_tags`, and choose
+`visualization_msgs/MarkerArray`. The sphere marks the physical tag position,
+the arrow shows its heading, and the label shows its ID. Only catalog entries
+already saved to disk are published on this topic.
 
 ## Stop the run
 
@@ -174,14 +182,17 @@ ros2 param set /tag_survey min_observations 3
 | `max_yaw_error` | 0.50 rad | the same for the dock's heading |
 | `max_tf_age` | 2.0 s | tag TF older than this is ignored (busy Jetson) |
 
-Check the result before using it: each dock should be ~0.33 m in front of
-its tag, facing it. In Foxglove, compare with the tag's position on `/map`.
+Check the result before using it: the tag markers should land on the physical
+tag positions, and each dock pose should be ~0.33 m in front of its tag.
 
 ## Using the survey
 
-Rebuild so the new file is installed, then run with it as the layout:
+Copy the saved catalog into the package's dock layouts, rebuild to install it,
+then run with it as the layout:
 
 ```bash
+PKG=$HOME/ws/src/Einride-Automotive-Hackathon/einride_mini_truck_application
+cp ~/.ros/room.yaml "$PKG/config/docks/room.yaml"
 cd ~/ws && colcon build --packages-select einride_mini_truck_application
 source ~/ws/install/setup.bash
 ros2 launch einride_mini_truck_application app.launch.py layout:=room slam:=true \
