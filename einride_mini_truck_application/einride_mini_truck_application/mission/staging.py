@@ -205,7 +205,7 @@ def choose_staging(grid: Optional[Grid], dock: Pose,
     robot does not even fit at any of them.
     """
     poses = [p for p in candidates(dock)
-             if not any(math.dist(p[:2], s[:2]) < 0.01 for s in skip)]
+             if not any(math.dist(p[:2], s[:2]) < 0.05 for s in skip)]
     if grid is None:
         return poses[0] if poses else None
     grid = with_shadows(grid)

@@ -10,7 +10,7 @@ slam_toolbox:
     odom_frame: odom
     map_frame: map
     base_frame: base_footprint
-    scan_topic: /scan
+    scan_topic: /scan_filtered
 
     # map_file_name (the saved maps/arena.posegraph + .data, without extension)
     # is set by launch/slam.launch.py, argument map_file.

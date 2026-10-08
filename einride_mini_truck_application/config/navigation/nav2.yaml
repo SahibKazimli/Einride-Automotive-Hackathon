@@ -229,7 +229,7 @@ velocity_smoother:
 docking_server:
   ros__parameters:
     controller_frequency: 50.0
-    initial_perception_timeout: 5.0
+    initial_perception_timeout: 15.0
     wait_charge_timeout: 5.0
     dock_approach_timeout: 30.0
     undock_linear_tolerance: 0.05

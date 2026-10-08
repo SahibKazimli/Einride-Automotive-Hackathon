@@ -205,7 +205,7 @@ def main(args: list[str] | None = None) -> None:
                         else None
                     rejected = task is None
                 else:
-                    if task == 'dock' and staging is not None:
+                    if task in ('staging', 'dock') and staging is not None:
                         if succeeded:
                             failed.clear()
                         else:   # e.g. tag not seen from there: look from elsewhere next
