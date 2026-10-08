@@ -34,6 +34,7 @@ from tf_transformations import quaternion_from_euler, quaternion_matrix
 from ..mission.staging import load_dock_frame
 from .camera_gate import CameraGate, load_dock_positions
 from .dock_pose import docked_pose
+from .timestamp import is_detection_stamp_fresh
 
 
 class DockPoseNode(Node):
@@ -127,7 +128,7 @@ class DockPoseNode(Node):
         if self.survey_mode:
             return   # the survey node records every tag; no docking pose is needed
         stamp_offset = (self.get_clock().now() - Time.from_msg(msg.header.stamp)).nanoseconds / 1e9
-        if abs(stamp_offset) > self.max_detection_stamp_offset:
+        if not is_detection_stamp_fresh(stamp_offset, self.max_detection_stamp_offset):
             self.get_logger().warn(
                 f'AprilTag detection timestamp is {stamp_offset:+.1f}s from ROS time; '
                 'camera/system clock may be unsynchronized', throttle_duration_sec=5.0)

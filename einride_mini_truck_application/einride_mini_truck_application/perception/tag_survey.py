@@ -31,6 +31,7 @@ from visualization_msgs.msg import Marker, MarkerArray
 
 from .dock_pose import DOCK_GAP, FRONT_OFFSET, docked_pose
 from .tag_catalog import compose, NAMES, Pose, summarize, write_dock_database
+from .timestamp import is_detection_stamp_fresh
 
 
 def planar(transform) -> Pose:
@@ -211,7 +212,7 @@ class TagSurveyNode(Node):
 
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
         stamp_offset = (self.get_clock().now() - Time.from_msg(msg.header.stamp)).nanoseconds / 1e9
-        if abs(stamp_offset) > self.max_detection_stamp_offset:
+        if not is_detection_stamp_fresh(stamp_offset, self.max_detection_stamp_offset):
             self.get_logger().warn(
                 f'AprilTag survey timestamp is {stamp_offset:+.1f}s from ROS time; '
                 'camera/system clock may be unsynchronized; ignoring detection',
