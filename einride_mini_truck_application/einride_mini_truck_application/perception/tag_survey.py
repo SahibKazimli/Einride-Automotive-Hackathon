@@ -29,7 +29,7 @@ from tf2_ros import Buffer, TransformException, TransformListener
 from tf_transformations import euler_from_quaternion, quaternion_matrix
 from visualization_msgs.msg import Marker, MarkerArray
 
-from .dock_pose import DOCK_GAP, FRONT_OFFSET, docked_pose
+from .dock_pose import DOCK_GAP, FRONT_OFFSET, docked_pose, tag_normal
 from .tag_catalog import compose, NAMES, Pose, summarize, write_dock_database
 from .timestamp import is_detection_stamp_fresh
 
@@ -122,10 +122,18 @@ class TagSurveyNode(Node):
         rotation = quaternion_matrix([q.x, q.y, q.z, q.w])[:3, :3].tolist()
         try:
             local_dock = docked_pose([t.x, t.y, t.z], rotation)
+            # The AprilTag frame's planar yaw describes its local X axis, which
+            # lies along the tag face. For the saved marker, use the tag's face
+            # normal instead so the Foxglove arrow points out from the printed tag.
+            nx, ny = tag_normal([t.x, t.y, t.z], rotation)
         except ValueError:
             return None
         robot_on_map = planar(robot.transform)
-        return compose(robot_on_map, planar(tag.transform)), compose(robot_on_map, local_dock)
+        tag_position = compose(robot_on_map, (t.x, t.y, 0.0))
+        normal_yaw = robot_on_map[2] + math.atan2(ny, nx)
+        tag_pose = (tag_position[0], tag_position[1],
+                    math.atan2(math.sin(normal_yaw), math.cos(normal_yaw)))
+        return tag_pose, compose(robot_on_map, local_dock)
 
     def load_catalog(self) -> None:
         """Load prior saves so partial surveys retain existing tags and markers."""
