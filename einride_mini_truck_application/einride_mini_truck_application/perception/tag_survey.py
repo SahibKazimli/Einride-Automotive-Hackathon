@@ -54,6 +54,7 @@ class TagSurveyNode(Node):
         self.min_observations = int(p('min_observations', 5).value)
         self.sample_period = float(p('sample_period', 0.5).value)
         self.max_tf_age = float(p('max_tf_age', 2.0).value)
+        self.max_detection_stamp_offset = float(p('max_detection_stamp_offset', 1.0).value)
         self.max_position_error = float(p('max_position_error', 0.30).value)
         self.max_yaw_error = float(p('max_yaw_error', 0.50).value)
 
@@ -209,6 +210,13 @@ class TagSurveyNode(Node):
         self.marker_pub.publish(markers)
 
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
+        stamp_offset = (self.get_clock().now() - Time.from_msg(msg.header.stamp)).nanoseconds / 1e9
+        if abs(stamp_offset) > self.max_detection_stamp_offset:
+            self.get_logger().warn(
+                f'AprilTag survey timestamp is {stamp_offset:+.1f}s from ROS time; '
+                'camera/system clock may be unsynchronized; ignoring detection',
+                throttle_duration_sec=5.0)
+            return
         now = time.monotonic()
         for detection in msg.detections:
             tag_id = int(detection.id)

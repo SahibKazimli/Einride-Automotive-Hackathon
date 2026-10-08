@@ -45,6 +45,8 @@ class DockPoseNode(Node):
         self.prefix = self.get_parameter('tag_frame_prefix').value
         # Seconds a tag TF may lag its detection and still count as that sighting.
         self.max_age = self.declare_parameter('max_tf_age', 2.0).value
+        self.max_detection_stamp_offset = self.declare_parameter(
+            'max_detection_stamp_offset', 1.0).value
         self.survey_mode = self.declare_parameter('survey_mode', False).value
         self.target = -1
         self.tf_buffer = Buffer()
@@ -124,6 +126,12 @@ class DockPoseNode(Node):
     def on_detections(self, msg: AprilTagDetectionArray) -> None:
         if self.survey_mode:
             return   # the survey node records every tag; no docking pose is needed
+        stamp_offset = (self.get_clock().now() - Time.from_msg(msg.header.stamp)).nanoseconds / 1e9
+        if abs(stamp_offset) > self.max_detection_stamp_offset:
+            self.get_logger().warn(
+                f'AprilTag detection timestamp is {stamp_offset:+.1f}s from ROS time; '
+                'camera/system clock may be unsynchronized', throttle_duration_sec=5.0)
+            return
         if self.target < 0 or not any(d.id == self.target for d in msg.detections):
             return
         frame = f'{self.prefix}{self.target}'
