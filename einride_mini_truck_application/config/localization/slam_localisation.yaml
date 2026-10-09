@@ -27,7 +27,9 @@ slam_toolbox:
 
     transform_publish_period: 0.05
     map_update_interval: 1.0
-    transform_timeout: 0.3
+    # Wait up to 1 s for odometry at a scan's time: under survey/docking CPU
+    # load the EKF lags and 0.3 s risked dropping scans (2026-10-09).
+    transform_timeout: 1.0
     tf_buffer_duration: 10.0
     resolution: 0.05
     minimum_time_interval: 0.2
@@ -36,8 +38,11 @@ slam_toolbox:
 
     use_scan_matching: true
     use_scan_barycenter: true
-    minimum_travel_distance: 0.2
-    minimum_travel_heading: 0.2
+    # Correct every 0.1 m / 0.1 rad (was 0.2): smaller, more frequent corrections,
+    # so gyro drift (~5% low) shows as small hops instead of big jumps, in an
+    # open room (2026-10-09). Costs a little CPU.
+    minimum_travel_distance: 0.1
+    minimum_travel_heading: 0.1
     scan_buffer_size: 10
     scan_buffer_maximum_scan_distance: 12.0
     link_match_minimum_response_fine: 0.1
