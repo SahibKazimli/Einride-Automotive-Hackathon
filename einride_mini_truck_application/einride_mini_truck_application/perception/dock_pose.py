@@ -16,7 +16,7 @@ from typing import Sequence
 #: base_footprint to the robot's front-most point (front wheel edge), m.
 FRONT_OFFSET = 0.126
 #: Nominal gap between the robot's front and the tag/back wall, m.
-DOCK_GAP = 0.200
+DOCK_GAP = 0.080
 
 Vector = Sequence[float]
 Matrix = Sequence[Sequence[float]]
