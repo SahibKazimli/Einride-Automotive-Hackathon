@@ -35,8 +35,9 @@ from std_msgs.msg import Int32, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from .mission import Mission
-from .staging import (choose_staging, Grid, load_dock_frame, load_dock_poses, Pose,
-                      realign_goal, turn_to_tag)
+from .staging import (ALIGN_STANDOFF, choose_staging, footprint_free, Grid, lane_free,
+                      load_dock_frame, load_dock_poses, Pose, realign_goal, turn_to_tag,
+                      with_shadows)
 
 DOCK_TYPE = 'competition_dock'
 # Smaller turns are not worth a Spin: the tag is then already near image centre.
@@ -44,6 +45,13 @@ MIN_FACE_TURN = math.radians(10.0)
 # A camera dock pose older than this (s) is not trusted for re-staging; with the
 # camera clock behind the system clock every pose looks old, so this is skipped.
 MAX_SEEN_DOCK_AGE = 1.0
+# Give up on reaching a staging (or straight-on) pose when the robot has not
+# moved STALL_DISTANCE nor turned STALL_TURN for STALL_TIME s, and try another.
+# Nav2 alone kept grinding against an obstacle in front of the pose with its
+# recoveries for minutes (2026-10-09). A normal long drive keeps moving.
+STALL_TIME = 8.0
+STALL_DISTANCE = 0.10
+STALL_TURN = 0.3
 
 
 class MissionIO(Node):
@@ -159,6 +167,8 @@ def main(args: list[str] | None = None) -> None:
     failed: list[Pose] = []   # staging poses where docking at `target` failed
     retried = False    # the running dock attempt was already retried in place
     aligned = False    # this staging pose was already corrected from the live tag
+    progress: tuple[float, Pose | None] = (0.0, None)   # (time, pose) of last real movement
+    last_task = None
     last_state = None
 
     def start_dock(tag: int) -> str | None:
@@ -196,10 +206,38 @@ def main(args: list[str] | None = None) -> None:
             rclpy.spin_once(io, timeout_sec=period)
             now = io.get_clock().now().nanoseconds * 1e-9
 
+            robot_now = io.robot_pose() if task in ('staging', 'align') else None
+            if task != last_task:
+                last_task, progress = task, (now, robot_now)
+            elif robot_now is not None:
+                moved_from = progress[1]
+                if moved_from is None or (
+                        math.dist(robot_now[:2], moved_from[:2]) > STALL_DISTANCE
+                        or abs(math.remainder(robot_now[2] - moved_from[2], math.tau))
+                        > STALL_TURN):
+                    progress = (now, robot_now)
+
             done = ok = False
             if rejected:
                 rejected = False
                 done = True
+            elif task in ('staging', 'align') and now - progress[0] > STALL_TIME:
+                nav.cancelTask()
+                if task == 'staging':
+                    # Probably blocked (an obstacle in front of the pose): count
+                    # this pose as failed so the next attempt picks another.
+                    log.warn(f'Stuck on the way to the staging pose for tag {target} '
+                             f'({STALL_TIME:.0f} s without moving); trying another')
+                    if staging is not None:
+                        failed.append(staging)
+                    task = None
+                    done = True
+                else:
+                    log.warn(f'Could not reach the straight spot for tag {target}; '
+                             'docking from here')
+                    task = 'dock' if nav.dockRobotByID(f'dock_{target}',
+                                                       nav_to_dock=False) else None
+                    rejected = task is None
             elif task is not None and nav.isTaskComplete():
                 succeeded = nav.status == GoalStatus.STATUS_SUCCEEDED
                 if task == 'staging' and succeeded:
@@ -209,6 +247,19 @@ def main(args: list[str] | None = None) -> None:
                     robot, seen = io.robot_pose(), io.seen_dock()
                     goal = realign_goal(robot, seen) if robot and seen and not aligned \
                         else None
+                    if goal is not None and io.grid is not None:
+                        # Only if that straight spot and the lane from it are
+                        # free: with an obstacle in front of the dock, dock from
+                        # the side spot instead of driving into it.
+                        grid = with_shadows(io.grid)
+                        c, s = math.cos(goal[2]), math.sin(goal[2])
+                        seen_dock = (goal[0] + ALIGN_STANDOFF * c,
+                                     goal[1] + ALIGN_STANDOFF * s, goal[2])
+                        if not (footprint_free(grid, goal)
+                                and lane_free(grid, goal, seen_dock)):
+                            log.info(f'Straight spot in front of tag {target} is blocked; '
+                                     'docking from here')
+                            goal = None
                     if goal is not None and nav.goToPose(io.pose_msg(goal)):
                         aligned = True
                         log.info(f'Off the centre line of tag {target}; re-staging straight '

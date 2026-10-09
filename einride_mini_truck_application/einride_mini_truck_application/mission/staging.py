@@ -52,11 +52,12 @@ DOCK_CLEARANCE = 0.4
 # The tag stands this far beyond the docked pose: robot front + docking gap,
 # the same numbers live docking uses (perception/dock_pose.py).
 TAG_DISTANCE = FRONT_OFFSET + DOCK_GAP
-# Staging must see the tag within this angle off its face. 35 deg let it stage
-# off to the side; the curved approach from there lost or misjudged the tag and
-# docking retried over and over (2026-10-09). Near head-on only; side spots
-# remain as a fallback when every head-on spot is blocked.
-MAX_VIEW_ANGLE = math.radians(15.0)
+# Staging must see the tag within this angle off its face. 15 deg (morning of
+# 2026-10-09) left no way past an obstacle standing in front of a dock: every
+# allowed spot was in its shadow and Nav2 ground against it. 30 deg lets it come
+# in beside the obstacle, as with the bucket on 2026-10-03; head-on spots are
+# still tried first, and the camera re-stages straight when that spot is free.
+MAX_VIEW_ANGLE = math.radians(30.0)
 # Before docking, check the robot against the REAL tag seen by the camera, not
 # the surveyed dock: a skewed survey stages it at an angle, and the docking
 # controller then curves in and loses the tag (2026-10-09). Off the tag's
@@ -64,6 +65,10 @@ MAX_VIEW_ANGLE = math.radians(15.0)
 ALIGN_MAX_OFFSET = 0.12
 ALIGN_MAX_ANGLE = math.radians(15.0)
 ALIGN_STANDOFF = 0.5
+# After a failed attempt, skip every candidate this close (m) to the failed
+# pose: with 0.05 the retry was 5-10 cm along the same blocked route and got
+# stuck the same way (2026-10-09). 0.25 makes each retry a different route.
+SKIP_RADIUS = 0.25
 # A 2D lidar sees only an obstacle's near face; assume it is this deep. Unseen
 # cells this close to a seen obstacle count as obstacle. Without it the lane
 # check ran through the unseen back half of a bucket, and the docking server's
@@ -241,7 +246,7 @@ def choose_staging(grid: Optional[Grid], dock: Pose,
     robot does not even fit at any of them.
     """
     poses = [p for p in candidates(dock)
-             if not any(math.dist(p[:2], s[:2]) < 0.05 for s in skip)]
+             if not any(math.dist(p[:2], s[:2]) < SKIP_RADIUS for s in skip)]
     if grid is None:
         return poses[0] if poses else None
     grid = with_shadows(grid)
