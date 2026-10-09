@@ -6,8 +6,9 @@ Docking runs in two steps so obstacles near the dock do not block it forever:
      (NavigateToPose);
   2. DockRobot without the docking server's own fixed staging pose: it
      approaches from where we are, steered by the AprilTag.
-If no staging pose is free (something parked in the bay), the mission waits
-and tries again with a fresh costmap.
+Each known dock gets two head-on attempts and one attempt up to 15 degrees
+off-axis. After all three fail, the mission waits for Saga to request a
+different tag instead of silently repeating the same route forever.
 
 Subscribes
     /saga/next_tag (std_msgs/Int32): tag id to go to, -1 = stay still
@@ -24,7 +25,6 @@ import math
 
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
-from nav2_msgs.action import DockRobot
 from nav2_simple_commander.robot_navigator import BasicNavigator
 from nav_msgs.msg import OccupancyGrid
 import rclpy
@@ -35,11 +35,10 @@ from std_msgs.msg import Int32, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from .mission import Mission
-from .staging import choose_staging, Grid, load_dock_frame, load_dock_poses, Pose, turn_to_tag
+from .staging import choose_staging, Grid, load_dock_frame, load_dock_poses, Pose
 
 DOCK_TYPE = 'competition_dock'
-# Smaller turns are not worth a Spin: the tag is then already near image centre.
-MIN_FACE_TURN = math.radians(10.0)
+STAGING_ATTEMPTS = 3
 
 
 class MissionIO(Node):
@@ -113,15 +112,6 @@ class MissionIO(Node):
         return msg
 
 
-def lost_tag(nav: BasicNavigator) -> bool:
-    """True if the finished DockRobot failed because the tag was not seen."""
-    try:
-        return nav.result_future.result().result.error_code == \
-            DockRobot.Result.FAILED_TO_DETECT_DOCK
-    except AttributeError:   # no result (cancelled) or an older nav2_msgs
-        return False
-
-
 def main(args: list[str] | None = None) -> None:
     rclpy.init(args=args)
     io = MissionIO()
@@ -129,17 +119,20 @@ def main(args: list[str] | None = None) -> None:
     log = io.get_logger()
     mission = Mission()
     period = io.get_parameter('tick_period').value
-    task = None        # None, 'staging' (NavigateToPose), 'face' (Spin), 'dock' or 'undock'
+    task = None        # None, 'staging' (NavigateToPose), 'dock' or 'undock'
     target = None      # tag of the running dock attempt
     rejected = False   # Nav2 refused / no staging pose: report as a failed task
+    rejected_dock = False  # rejected action was a dock request, not an undock
     staging = None     # staging pose of the running dock attempt
     failed: list[Pose] = []   # staging poses where docking at `target` failed
-    retried = False    # the running dock attempt was already retried in place
+    attempt_index = 0  # two head-on attempts, then one <=15-degree attempt
+    last_saga_target = None
+    exhausted_tag = None
     last_state = None
 
     def start_dock(tag: int) -> str | None:
         """Step 1: drive to a free staging pose. Returns the running task."""
-        nonlocal staging
+        nonlocal staging, attempt_index, exhausted_tag
         staging = None
         if tag not in io.docks:   # no layout known: let the docking server stage itself
             return 'dock' if nav.dockRobotByID(f'dock_{tag}', nav_to_dock=True) else None
@@ -149,13 +142,18 @@ def main(args: list[str] | None = None) -> None:
         if io.grid is None:   # picking blind would give the nominal pose, maybe in an obstacle
             log.info('No global costmap yet; waiting before choosing a staging pose')
             return None
-        staging = choose_staging(io.grid, dock, failed)
-        if staging is None and failed:   # tried every free pose: start over
-            log.warn(f'Docking at tag {tag} failed from every staging pose; trying them again')
-            failed.clear()
-            staging = choose_staging(io.grid, dock)
+        if attempt_index >= STAGING_ATTEMPTS:
+            exhausted_tag = tag
+            log.error(f'Giving up on tag {tag} after {STAGING_ATTEMPTS} attempts '
+                      '(two straight-on, one up to 15 degrees). Waiting for Saga to advance.')
+            return None
+        attempt = attempt_index
+        attempt_index += 1
+        staging = choose_staging(io.grid, dock, failed, attempt)
         if staging is None:
-            log.warn(f'Dock of tag {tag} is blocked (no free staging pose); waiting')
+            label = ('straight-on attempt 1' if attempt == 0 else
+                     'straight-on attempt 2' if attempt == 1 else 'angled attempt')
+            log.warn(f'No safe staging pose for tag {tag} ({label}); counting this attempt')
             return None
         log.info(f'Staging for tag {tag} at ({staging[0]:.2f}, {staging[1]:.2f}, '
                  f'{math.degrees(staging[2]):.0f} deg)')
@@ -175,32 +173,18 @@ def main(args: list[str] | None = None) -> None:
             if rejected:
                 rejected = False
                 done = True
+                if rejected_dock and target is not None and target in io.docks \
+                        and attempt_index >= STAGING_ATTEMPTS:
+                    exhausted_tag = target
+                    io.target_pub.publish(Int32(data=-1))
+                    log.error(f'Giving up on tag {target} after {STAGING_ATTEMPTS} attempts '
+                              '(two straight-on, one up to 15 degrees). '
+                              'Waiting for Saga to advance.')
+                rejected_dock = False
             elif task is not None and nav.isTaskComplete():
                 succeeded = nav.status == GoalStatus.STATUS_SUCCEEDED
                 if task == 'staging' and succeeded:
                     # Step 2: tag-guided approach from here.
-                    task = 'dock' if nav.dockRobotByID(f'dock_{target}', nav_to_dock=False) \
-                        else None
-                    rejected = task is None
-                    retried = False
-                elif task == 'dock' and not succeeded and not retried and lost_tag(nav):
-                    # The tag dropped out mid-approach. The robot is near the dock,
-                    # so try again from here before driving off to another staging
-                    # pose (that turn-away-and-back looked erratic, run_2137). The
-                    # approach curve can leave the tag outside the camera's view
-                    # (run_2226, 2026-10-03), so first turn to face where it is.
-                    retried = True
-                    robot, dock = io.robot_pose(), io.dock_in_grid_frame(target)
-                    turn = turn_to_tag(robot, dock) if robot and dock else 0.0
-                    log.warn(f'Lost tag {target} while docking; turning '
-                             f'{math.degrees(turn):.0f} deg to it and retrying from here')
-                    if abs(turn) >= MIN_FACE_TURN and nav.spin(spin_dist=turn):
-                        task = 'face'
-                    else:
-                        task = 'dock' if nav.dockRobotByID(f'dock_{target}',
-                                                           nav_to_dock=False) else None
-                        rejected = task is None
-                elif task == 'face':   # turned (or could not): dock from here
                     task = 'dock' if nav.dockRobotByID(f'dock_{target}', nav_to_dock=False) \
                         else None
                     rejected = task is None
@@ -210,22 +194,43 @@ def main(args: list[str] | None = None) -> None:
                             failed.clear()
                         else:   # e.g. tag not seen from there: look from elsewhere next
                             failed.append(staging)
+                    if task in ('staging', 'dock') and not succeeded and target in io.docks \
+                            and attempt_index >= STAGING_ATTEMPTS:
+                        exhausted_tag = target
+                        io.target_pub.publish(Int32(data=-1))
+                        log.error(f'Giving up on tag {target} after {STAGING_ATTEMPTS} attempts '
+                                  '(two straight-on, one up to 15 degrees). '
+                                  'Waiting for Saga to advance.')
                     task = None
                     done = True
                     ok = succeeded
 
-            action = mission.step(now, io.requested, done, ok)
+            # A failed target stays suppressed even if Saga briefly publishes -1.
+            # Only a different nonnegative Saga target clears the failure latch.
+            if io.requested is not None and io.requested != last_saga_target:
+                if last_saga_target is not None:
+                    failed.clear()
+                    attempt_index = 0
+                if exhausted_tag is not None and io.requested != exhausted_tag:
+                    exhausted_tag = None
+                last_saga_target = io.requested
+            requested = None if io.requested == exhausted_tag else io.requested
+
+            action = mission.step(now, requested, done, ok)
             if action is not None:
                 if action.kind == 'dock':
                     if action.tag != target:
                         failed.clear()
+                        attempt_index = 0
                     target = action.tag
                     io.target_pub.publish(Int32(data=action.tag))
                     task = start_dock(action.tag)
                     rejected = task is None
+                    rejected_dock = rejected
                 elif action.kind == 'undock':
                     task = 'undock' if nav.undockRobot(DOCK_TYPE) else None
                     rejected = task is None
+                    rejected_dock = False
                 elif action.kind == 'cancel':
                     nav.cancelTask()
                     task = None
@@ -233,7 +238,11 @@ def main(args: list[str] | None = None) -> None:
             if mission.state != last_state:
                 last_state = mission.state
                 log.info(f'Mission: {mission.state} (target {mission.target})')
-            io.state_pub.publish(String(data=f'{mission.state} target={mission.target}'))
+            if exhausted_tag is not None and io.requested == exhausted_tag:
+                state = f'FAILED target={exhausted_tag} waiting for Saga to advance'
+            else:
+                state = f'{mission.state} target={mission.target}'
+            io.state_pub.publish(String(data=state))
     except KeyboardInterrupt:
         pass
     finally:

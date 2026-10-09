@@ -198,17 +198,32 @@ def with_shadows(grid: Grid, depth: float = SHADOW_DEPTH) -> Grid:
 
 
 def choose_staging(grid: Optional[Grid], dock: Pose,
-                   skip: Sequence[Pose] = ()) -> Optional[Pose]:
+                   skip: Sequence[Pose] = (), attempt: Optional[int] = None) -> Optional[Pose]:
     """First candidate where the robot fits and can drive into the dock.
 
     `skip`: poses where docking already failed (e.g. tag not seen from there),
     so a retry looks from somewhere else instead of repeating the same failure.
-    No grid yet: the first candidate (Nav2 will find out if it is blocked).
-    The robot must keep trying, so when nothing passes the strict checks it
-    relaxes them step by step; None only if every candidate is skipped or the
-    robot does not even fit at any of them.
+    `attempt` selects a bounded strategy: the first two candidates are
+    straight-on; the third is limited to MAX_VIEW_ANGLE. With an explicit
+    attempt, angle limits stay in force even in the relaxed costmap passes.
+    No grid yet: return the first candidate and let Nav2 check it.
     """
-    poses = [p for p in candidates(dock)
+    if attempt is None:
+        poses = candidates(dock)
+    elif attempt in (0, 1):
+        # The first two approaches are head-on, at progressively closer
+        # staging distances. The dock controller then drives straight in.
+        distance = 0.7 if attempt == 0 else 0.5
+        poses = candidates(dock, (distance,), (0.0,))
+    elif attempt == 2:
+        # One alternate view is allowed if a straight approach fails. Keep
+        # every candidate inside the same 15-degree face-on limit.
+        poses = [p for p in candidates(dock)
+                 if 1e-6 < view_angle(p, dock) <= MAX_VIEW_ANGLE]
+    else:
+        return None
+
+    poses = [p for p in poses
              if not any(math.dist(p[:2], s[:2]) < 0.05 for s in skip)]
     if grid is None:
         return poses[0] if poses else None
@@ -222,8 +237,10 @@ def choose_staging(grid: Optional[Grid], dock: Pose,
         for pose in poses:
             if not footprint_free(grid, pose, margin, unknown_blocks):
                 continue
-            if strict and (view_angle(pose, dock) > MAX_VIEW_ANGLE
-                           or not lane_free(grid, pose, dock, margin=margin)):
+            if ((attempt is not None or strict) and
+                    view_angle(pose, dock) > MAX_VIEW_ANGLE):
+                continue
+            if strict and not lane_free(grid, pose, dock, margin=margin):
                 continue
             return pose
     return None
