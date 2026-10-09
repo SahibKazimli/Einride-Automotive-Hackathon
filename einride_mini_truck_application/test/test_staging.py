@@ -5,7 +5,8 @@ import os
 
 from einride_mini_truck_application.mission.staging import (
     candidates, choose_staging, footprint_free, Grid, lane_free, load_dock_poses,
-    MAX_VIEW_ANGLE, TAG_DISTANCE, TIGHT_MARGIN, turn_to_tag, view_angle, with_shadows)
+    MAX_VIEW_ANGLE, realign_goal, TAG_DISTANCE, TIGHT_MARGIN, turn_to_tag, view_angle,
+    with_shadows)
 import pytest
 
 HOME = os.path.join(os.path.dirname(__file__), '..', 'config', 'docks', 'home.yaml')
@@ -163,3 +164,32 @@ def test_turn_to_tag() -> None:
     robot = (1.42, 0.30, 0.3)
     assert turn_to_tag(robot, DOCK_G) == pytest.approx(math.atan2(-0.30, tag_x - 1.42) - 0.3)
     assert abs(turn_to_tag((1.0, 0.0, math.pi), DOCK_G)) == pytest.approx(math.pi)
+
+
+def test_realign_not_needed_when_straight_in_front() -> None:
+    """Camera sees the dock 0.4 m straight ahead: dock as is."""
+    assert realign_goal((1.0, 2.0, 0.3), (0.4, 0.0, 0.0)) is None
+    # Small offsets within the limits are left to the docking controller.
+    assert realign_goal((0.0, 0.0, 0.0), (0.4, 0.05, math.radians(5))) is None
+
+
+def test_realign_onto_the_real_centre_line() -> None:
+    """2026-10-09: a skewed survey staged the robot off to the side of the tag.
+    Re-stage straight out from the dock the camera actually sees."""
+    # Robot at the origin facing +x; the seen dock is 0.6 ahead, 0.3 to the left,
+    # and faces +x too (tag straight ahead of that point): robot is 0.3 m off the line.
+    goal = realign_goal((0.0, 0.0, 0.0), (0.6, 0.3, 0.0))
+    assert goal == pytest.approx((0.1, 0.3, 0.0))   # 0.5 m behind the dock, on its line
+
+
+def test_realign_when_approaching_at_an_angle() -> None:
+    # Dock straight ahead but turned 30 deg: robot is on a 30 deg angle to the tag.
+    goal = realign_goal((0.0, 0.0, 0.0), (0.6, 0.0, math.radians(30)))
+    c, s = math.cos(math.radians(30)), math.sin(math.radians(30))
+    assert goal == pytest.approx((0.6 - 0.5 * c, -0.5 * s, math.radians(30)))
+
+
+def test_realign_goal_is_in_the_costmap_frame() -> None:
+    # Same situation as above, robot at (2, 1) facing +y (90 deg) in the costmap.
+    goal = realign_goal((2.0, 1.0, math.pi / 2), (0.6, 0.3, 0.0))
+    assert goal == pytest.approx((2.0 - 0.3, 1.0 + 0.1, math.pi / 2))

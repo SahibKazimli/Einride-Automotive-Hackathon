@@ -57,6 +57,13 @@ TAG_DISTANCE = FRONT_OFFSET + DOCK_GAP
 # docking retried over and over (2026-10-09). Near head-on only; side spots
 # remain as a fallback when every head-on spot is blocked.
 MAX_VIEW_ANGLE = math.radians(15.0)
+# Before docking, check the robot against the REAL tag seen by the camera, not
+# the surveyed dock: a skewed survey stages it at an angle, and the docking
+# controller then curves in and loses the tag (2026-10-09). Off the tag's
+# centre line by more than this -> re-stage ALIGN_STANDOFF straight out from it.
+ALIGN_MAX_OFFSET = 0.12
+ALIGN_MAX_ANGLE = math.radians(15.0)
+ALIGN_STANDOFF = 0.5
 # A 2D lidar sees only an obstacle's near face; assume it is this deep. Unseen
 # cells this close to a seen obstacle count as obstacle. Without it the lane
 # check ran through the unseen back half of a bucket, and the docking server's
@@ -157,6 +164,31 @@ def turn_to_tag(robot: Pose, dock: Pose) -> float:
     x, y, yaw = dock
     tx, ty = x + TAG_DISTANCE * math.cos(yaw), y + TAG_DISTANCE * math.sin(yaw)
     return math.remainder(math.atan2(ty - robot[1], tx - robot[0]) - robot[2], math.tau)
+
+
+def realign_goal(robot: Pose, seen_dock: Pose, standoff: float = ALIGN_STANDOFF,
+                 max_offset: float = ALIGN_MAX_OFFSET,
+                 max_angle: float = ALIGN_MAX_ANGLE) -> Optional[Pose]:
+    """A straight-on staging pose for the dock the camera sees; None if already fine.
+
+    `seen_dock` is the docked pose computed from the live tag, in the robot's
+    own frame (x forward, y left), as perception publishes /detected_dock_pose.
+    `robot` is the robot's pose in the costmap frame; so is the result: a pose
+    `standoff` m straight out from the seen dock, facing it.
+    """
+    dx, dy, dyaw = seen_dock
+    c, s = math.cos(dyaw), math.sin(dyaw)
+    # Distance from the robot (this frame's origin) to the dock's centre line,
+    # and how far the robot's heading is from the docked heading.
+    offset = abs(s * dx - c * dy)
+    angle = abs(math.remainder(dyaw, math.tau))
+    if offset <= max_offset and angle <= max_angle:
+        return None
+    lx, ly = dx - standoff * c, dy - standoff * s
+    x, y, yaw = robot
+    rc, rs = math.cos(yaw), math.sin(yaw)
+    return (x + rc * lx - rs * ly, y + rs * lx + rc * ly,
+            math.remainder(yaw + dyaw, math.tau))
 
 
 def candidates(dock: Pose, distances: Sequence[float] = DISTANCES,

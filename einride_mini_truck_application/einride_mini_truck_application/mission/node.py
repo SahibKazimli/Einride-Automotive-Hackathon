@@ -35,11 +35,15 @@ from std_msgs.msg import Int32, String
 from tf2_ros import Buffer, TransformException, TransformListener
 
 from .mission import Mission
-from .staging import choose_staging, Grid, load_dock_frame, load_dock_poses, Pose, turn_to_tag
+from .staging import (choose_staging, Grid, load_dock_frame, load_dock_poses, Pose,
+                      realign_goal, turn_to_tag)
 
 DOCK_TYPE = 'competition_dock'
 # Smaller turns are not worth a Spin: the tag is then already near image centre.
 MIN_FACE_TURN = math.radians(10.0)
+# A camera dock pose older than this (s) is not trusted for re-staging; with the
+# camera clock behind the system clock every pose looks old, so this is skipped.
+MAX_SEEN_DOCK_AGE = 1.0
 
 
 class MissionIO(Node):
@@ -66,11 +70,29 @@ class MissionIO(Node):
                                  reliability=ReliabilityPolicy.RELIABLE)
         self.create_subscription(OccupancyGrid, '/global_costmap/costmap',
                                  self.on_costmap, costmap_qos)
+        # Docked pose from the live tag (perception/node.py), in base_footprint.
+        self.seen: PoseStamped | None = None
+        self.create_subscription(PoseStamped, '/detected_dock_pose', self.on_seen_dock, 10)
         self.target_pub = self.create_publisher(Int32, '/mission/target_tag', latched)
         self.state_pub = self.create_publisher(String, '/mission/state', 10)
 
     def on_next_tag(self, msg: Int32) -> None:
         self.requested = None if msg.data < 0 else msg.data
+
+    def on_seen_dock(self, msg: PoseStamped) -> None:
+        self.seen = msg
+
+    def seen_dock(self) -> Pose | None:
+        """The camera's docked pose in the robot frame, None if missing or stale."""
+        msg = self.seen
+        if msg is None or msg.header.frame_id != 'base_footprint':
+            return None
+        age = (self.get_clock().now() - Time.from_msg(msg.header.stamp)).nanoseconds * 1e-9
+        if not 0.0 <= age <= MAX_SEEN_DOCK_AGE:
+            return None
+        q = msg.pose.orientation
+        yaw = math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z))
+        return (msg.pose.position.x, msg.pose.position.y, yaw)
 
     def on_costmap(self, msg: OccupancyGrid) -> None:
         info = msg.info
@@ -129,18 +151,21 @@ def main(args: list[str] | None = None) -> None:
     log = io.get_logger()
     mission = Mission()
     period = io.get_parameter('tick_period').value
-    task = None        # None, 'staging' (NavigateToPose), 'face' (Spin), 'dock' or 'undock'
+    # None, 'staging' / 'align' (NavigateToPose), 'face' (Spin), 'dock' or 'undock'
+    task = None
     target = None      # tag of the running dock attempt
     rejected = False   # Nav2 refused / no staging pose: report as a failed task
     staging = None     # staging pose of the running dock attempt
     failed: list[Pose] = []   # staging poses where docking at `target` failed
     retried = False    # the running dock attempt was already retried in place
+    aligned = False    # this staging pose was already corrected from the live tag
     last_state = None
 
     def start_dock(tag: int) -> str | None:
         """Step 1: drive to a free staging pose. Returns the running task."""
-        nonlocal staging
+        nonlocal staging, aligned
         staging = None
+        aligned = False
         if tag not in io.docks:   # no layout known: let the docking server stage itself
             return 'dock' if nav.dockRobotByID(f'dock_{tag}', nav_to_dock=True) else None
         dock = io.dock_in_grid_frame(tag)
@@ -178,11 +203,27 @@ def main(args: list[str] | None = None) -> None:
             elif task is not None and nav.isTaskComplete():
                 succeeded = nav.status == GoalStatus.STATUS_SUCCEEDED
                 if task == 'staging' and succeeded:
-                    # Step 2: tag-guided approach from here.
+                    # Step 2: if the camera shows the robot off the real tag's
+                    # centre line (skewed survey), first re-stage straight in
+                    # front of the tag it sees; then the tag-guided approach.
+                    robot, seen = io.robot_pose(), io.seen_dock()
+                    goal = realign_goal(robot, seen) if robot and seen and not aligned \
+                        else None
+                    if goal is not None and nav.goToPose(io.pose_msg(goal)):
+                        aligned = True
+                        log.info(f'Off the centre line of tag {target}; re-staging straight '
+                                 f'at ({goal[0]:.2f}, {goal[1]:.2f}, '
+                                 f'{math.degrees(goal[2]):.0f} deg)')
+                        task = 'align'
+                    else:
+                        task = 'dock' if nav.dockRobotByID(f'dock_{target}',
+                                                           nav_to_dock=False) else None
+                        rejected = task is None
+                    retried = False
+                elif task == 'align':   # straightened up (or Nav2 could not): dock
                     task = 'dock' if nav.dockRobotByID(f'dock_{target}', nav_to_dock=False) \
                         else None
                     rejected = task is None
-                    retried = False
                 elif task == 'dock' and not succeeded and not retried and lost_tag(nav):
                     # The tag dropped out mid-approach. The robot is near the dock,
                     # so try again from here before driving off to another staging
