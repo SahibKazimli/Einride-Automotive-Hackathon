@@ -24,6 +24,8 @@ from typing import Optional, Sequence
 
 import yaml
 
+from ..perception.dock_pose import DOCK_GAP, FRONT_OFFSET
+
 Pose = tuple[float, float, float]   # x, y, yaw
 
 # Robot outline from config/navigation/nav2.yaml (base_footprint centred).
@@ -47,12 +49,14 @@ LATERALS = (0.0, 0.15, -0.15, 0.3, -0.3, 0.45, -0.45, 0.6, -0.6)   # 0.6: lane p
 # The last part of the lane next to the dock is ignored: the dock's own walls
 # and the tag holder are there (matches docking_server dock_collision_threshold).
 DOCK_CLEARANCE = 0.4
-# The tag stands this far beyond the docked pose (perception/dock_pose.py:
-# 0.126 m robot front + 0.200 m gap).
-TAG_DISTANCE = 0.326
-# Staging must see the tag within this angle off its face. ~30 deg is known to
-# detect; (1.27, 0.6) beside a bucket saw it at ~40 deg and was borderline.
-MAX_VIEW_ANGLE = math.radians(35.0)
+# The tag stands this far beyond the docked pose: robot front + docking gap,
+# the same numbers live docking uses (perception/dock_pose.py).
+TAG_DISTANCE = FRONT_OFFSET + DOCK_GAP
+# Staging must see the tag within this angle off its face. 35 deg let it stage
+# off to the side; the curved approach from there lost or misjudged the tag and
+# docking retried over and over (2026-10-09). Near head-on only; side spots
+# remain as a fallback when every head-on spot is blocked.
+MAX_VIEW_ANGLE = math.radians(15.0)
 # A 2D lidar sees only an obstacle's near face; assume it is this deep. Unseen
 # cells this close to a seen obstacle count as obstacle. Without it the lane
 # check ran through the unseen back half of a bucket, and the docking server's

@@ -2,7 +2,7 @@
 
 import math
 
-from einride_mini_truck_application.perception.dock_pose import docked_pose, FRONT_OFFSET
+from einride_mini_truck_application.perception.dock_pose import DOCK_GAP, docked_pose, FRONT_OFFSET
 import pytest
 
 
@@ -24,21 +24,21 @@ def rotation_facing(yaw: float, z_into_wall: bool = False) -> list[list[float]]:
 def test_tag_straight_ahead(z_into_wall: bool) -> None:
     # Tag 1 m ahead, facing the robot (normal points back along -x).
     x, y, yaw = docked_pose([1.0, 0.0, 0.13], rotation_facing(math.pi, z_into_wall))
-    assert x == pytest.approx(1.0 - 0.2 - FRONT_OFFSET)
+    assert x == pytest.approx(1.0 - DOCK_GAP - FRONT_OFFSET)
     assert y == pytest.approx(0.0)
     assert yaw == pytest.approx(0.0)
 
 
-def test_front_gap_is_200_mm() -> None:
+def test_front_gap_is_dock_gap() -> None:
     x, _, _ = docked_pose([0.8, 0.0, 0.13], rotation_facing(math.pi))
-    assert 0.8 - (x + FRONT_OFFSET) == pytest.approx(0.200)
+    assert 0.8 - (x + FRONT_OFFSET) == pytest.approx(DOCK_GAP)
 
 
 def test_angled_tag_off_to_the_left() -> None:
     # Tag 1 m ahead and 0.5 m left, its face turned 30 deg toward the robot's side.
     normal_yaw = math.pi - math.radians(30)
     x, y, yaw = docked_pose([1.0, 0.5, 0.13], rotation_facing(normal_yaw))
-    standoff = 0.2 + FRONT_OFFSET
+    standoff = DOCK_GAP + FRONT_OFFSET
     assert x == pytest.approx(1.0 + standoff * math.cos(normal_yaw))
     assert y == pytest.approx(0.5 + standoff * math.sin(normal_yaw))
     # The docked robot looks straight at the tag, against its normal.

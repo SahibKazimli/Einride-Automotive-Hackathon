@@ -5,13 +5,13 @@ import os
 
 from einride_mini_truck_application.mission.staging import load_dock_frame, load_dock_poses
 from einride_mini_truck_application.perception.camera_gate import load_dock_positions
-from einride_mini_truck_application.perception.dock_pose import docked_pose
+from einride_mini_truck_application.perception.dock_pose import DOCK_GAP, docked_pose, FRONT_OFFSET
 from einride_mini_truck_application.perception.tag_catalog import (
     compose, mean_yaw, summarize, write_dock_database)
 import pytest
 
 HOME = os.path.join(os.path.dirname(__file__), '..', 'config', 'docks', 'home.yaml')
-STANDOFF = 0.326
+STANDOFF = DOCK_GAP + FRONT_OFFSET
 
 
 def sighting(robot, tag_xy, tag_facing):
@@ -41,7 +41,7 @@ def test_compose() -> None:
 @pytest.mark.parametrize('robot', [(0.0, 0.0, 0.0), (1.0, 0.5, 0.3), (2.0, -0.4, -0.6),
                                    (1.5, 1.5, 2.5)])
 def test_same_dock_from_anywhere(robot) -> None:
-    # Tag on a wall at (3, 1) facing back along -x: dock 0.326 m in front, facing +x.
+    # Tag on a wall at (3, 1) facing back along -x: dock STANDOFF in front, facing +x.
     assert survey_one(robot, (3.0, 1.0), math.pi) == pytest.approx((3.0 - STANDOFF, 1.0, 0.0))
 
 

@@ -1,10 +1,11 @@
 """Where the robot must stop in front of a seen AprilTag. No ROS imports.
 
 Competition dock geometry (einride_mini_truck_gazebo/dock_template/model.sdf.in):
-the tag is on the back wall, and a docked robot faces it with its front 200 mm
-from the wall (scored window 150-250 mm, yaw error < 6 deg). The robot's front
-is 0.126 m ahead of base_footprint, so base_footprint stops 0.326 m out from
-the tag along the tag's normal.
+the tag is on the back wall, and a docked robot faces it with its front about
+160 mm from the wall (what the organisers told us on 2026-10-09; earlier notes
+said 150-250 mm, yaw error < 6 deg). The robot's front is 0.126 m ahead of
+base_footprint, so base_footprint stops 0.286 m out from the tag along the
+tag's normal.
 
 Nav2's docking server (SimpleNonChargingDock with zero detection offsets)
 drives base_footprint to exactly the pose computed here.
@@ -15,8 +16,10 @@ from typing import Sequence
 
 #: base_footprint to the robot's front-most point (front wheel edge), m.
 FRONT_OFFSET = 0.126
-#: Nominal gap between the robot's front and the tag/back wall, m.
-DOCK_GAP = 0.080
+#: Nominal gap between the robot's front and the tag/back wall, m. Not below
+#: ~0.1: the collision monitor's stop zone reaches 0.08 m past the front, and
+#: with 0.08 the wall sat on its edge and stopped every final approach.
+DOCK_GAP = 0.160
 
 Vector = Sequence[float]
 Matrix = Sequence[Sequence[float]]
