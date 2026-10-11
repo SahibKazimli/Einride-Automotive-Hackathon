@@ -3,7 +3,10 @@
 # Reference: https://docs.ros.org/en/jazzy/p/robot_localization/
 ekf_filter_node:
   ros__parameters:
-    frequency: 30.0
+    # 30 Hz missed its deadline about twice a second with Nav2 + SLAM running
+    # (2026-10-07), delaying odom TF so slam_toolbox dropped scans. Nav2's
+    # controller runs at 20 Hz, so faster gains nothing.
+    frequency: 20.0
     two_d_mode: true            # flat floor: ignore z, roll, pitch
     publish_tf: true
     map_frame: map

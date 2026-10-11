@@ -27,11 +27,15 @@ Finals: 2026-10-09. ROS 2 Jazzy on a Jetson Orin Nano. Our code is the
   timestamp vs. `git log`, and the expected log lines are present).
 
 ## Architecture (app.launch.py)
-- **Frames**: arena -> odom (static identity, start pose = origin) ->
-  base_footprint (robot_localization EKF from wheel odometry + gyro). No map,
-  no AMCL; Nav2 runs in `odom` with rolling costmaps.
+- **Frames**: arena -> odom (static, start pose) -> base_footprint
+  (robot_localization EKF at 20 Hz from wheel odometry + gyro). With
+  `slam:=true map_file:=<full path, no extension>`: arena -> map (static) ->
+  odom (slam_toolbox localization against a saved map) -> base_footprint.
+  Nav2 always runs in `odom` with rolling costmaps.
 - **localization/**: wheel odometry node (gyro bias calibrated at start; keep
-  the robot still ~3 s) + `config/localization/ekf.yaml`.
+  the robot still until `Gyro bias calibrated`, ~10 s) +
+  `config/localization/ekf.yaml`. SLAM: `launch/slam.launch.py`,
+  `docs/slam-localization.md`.
 - **perception/**: apriltag_ros (tag36h11, 0.100 m, `max_hamming: 2`) on
   `/dock_camera/image_raw`; `dock_pose` node relays the target tag's pose to
   the docking server, with a camera gate (detection only on within ~1.6/1.9 m
@@ -42,7 +46,9 @@ Finals: 2026-10-09. ROS 2 Jazzy on a Jetson Orin Nano. Our code is the
   `collision_monitor` (PolygonStop/Slow) + `laser_filters` for safety.
 - **Docking**: opennav_docking, `SimpleNonChargingDock` type
   `competition_dock`, docks `dock_<tag>` in `config/docks/<layout>.yaml`
-  (`layout:=home|arena`). Docked pose = 0.326 m in front of the tag.
+  (`layout:=home|arena|room`). Docked pose = 0.326 m in front of the tag.
+  The dock frame comes from the file (`arena`, or `map` for a surveyed
+  layout, which needs `slam:=true`). Survey: `docs/apriltag-map-survey.md`.
 - **saga/**: polls Saga, publishes `/saga/next_tag` (-1 = stay).
 - **mission/**: `mission.py` state machine (IDLE, DOCKING, DOCKED, UNDOCKING,
   RETRY_WAIT with 2 s retry). `node.py` docks in two steps:
@@ -59,7 +65,26 @@ Finals: 2026-10-09. ROS 2 Jazzy on a Jetson Orin Nano. Our code is the
 - Spot 2: tag 0.42 m ahead, 1.0 m left, facing -y -> odd tags.
 - The tag can be shown fullscreen on a laptop (turn brightness down vs glare).
 
-## Status (2026-10-03)
+## Status (2026-10-08)
+Branch `slam-local-in-loop`. Every robot test with numbers and the
+competition-day checklist: `docs/test-log.md`; task list: `TODO.md`.
+- Tests 1-5 done (odometry, Nav2, obstacles, tags, docking). Test 6 (full
+  Saga loop) not yet passed.
+- SLAM localization works: one lap within 5 cm / 8 deg (odometry alone was off
+  by 1.6 m / 92 deg before the slow-turn gyro fix). Room map: `maps/room_1lap`.
+- Fixed and tested on the robot: gyro slow turns (e7c42a9), collision monitor
+  reversing (f976bd5). EKF at 20 Hz (2b1e022).
+- **Camera clock**: after every boot the camera stamps are minutes behind the
+  system clock; survey and docking then fail ("extrapolation into the past").
+  Restart `einride-mini-truck` after time sync and compare the
+  `/oak/rgb/image_raw` stamp with `date +%s` before starting the app.
+- Next: survey A, B, C in the room -> rebuild -> test 6 with
+  `layout:=room slam:=true`, then the arena.
+- Known: gyro reads ~5% low (`gyro_scale` in TODO); the lidar cannot see
+  obstacles below 14 cm; camera reaches apriltag at a few Hz (CPU);
+  apriltag_node segfaults on shutdown (harmless).
+
+## Earlier status (2026-10-03, kept for reference)
 - Tests 1-5 done: odometry, Nav2 driving, obstacle avoidance, tag detection,
   docking.
 - **Test 6 (full Saga loop) in progress**: route 5 = dock at G (tag 6), load,

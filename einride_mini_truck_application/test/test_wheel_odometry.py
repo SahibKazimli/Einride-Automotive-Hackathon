@@ -70,6 +70,17 @@ def test_gyro_bias_removed() -> None:
     assert bias.update(1.01, still=False) == pytest.approx(1.0)
 
 
+def test_slow_turn_between_encoder_ticks_is_not_still() -> None:
+    """Wheels report still between centimetre ticks; the gyro shows the turn."""
+    bias = GyroBias(startup_samples=100)
+    for _ in range(100):
+        bias.update(0.007, still=True)
+    turn = 0.35 + 0.007   # raw reading while turning in place at 0.35 rad/s
+    heading = sum(bias.update(turn, still=True) * 0.0125 for _ in range(800))   # 10 s
+    assert heading == pytest.approx(0.35 * 10.0, rel=1e-3)
+    assert bias.bias == pytest.approx(0.007)   # the turn was not learned as bias
+
+
 def test_bias_drift_over_a_minute_is_removed() -> None:
     """Without correction a 0.5 deg/s bias is 30 deg of heading per minute."""
     raw_bias = math.radians(0.5)

@@ -58,7 +58,7 @@ class WheelOdometryNode(Node):
         self.create_subscription(JointState, '/wheel_encoders', self.on_encoders,
                                  qos_profile_sensor_data)
         self.create_subscription(Imu, '/imu', self.on_imu, qos_profile_sensor_data)
-        self.get_logger().info('Keep the robot still for ~3 s to calibrate the gyro.')
+        self.get_logger().info('Keep the robot still until "Gyro bias calibrated".')
 
     def on_encoders(self, msg: JointState) -> None:
         try:

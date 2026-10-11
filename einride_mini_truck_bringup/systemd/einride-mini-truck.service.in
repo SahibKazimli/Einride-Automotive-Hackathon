@@ -26,10 +26,12 @@
 [Unit]
 Description=Einride mini truck ROS 2 stack (hardware.launch.py)
 
-# DDS discovery binds multicast to a real interface at startup. Started before
-# the network is up, the stack comes alive but its participants never find
-# anything off-board, which looks like a working robot that nothing can talk to.
-After=network-online.target
+# DDS discovery binds multicast to a real interface at startup. The OAK-D also
+# initializes its message timestamps when its driver starts, so wait for both
+# the network and synchronized system time before opening the camera.
+# time-sync.target must be held until sync by systemd-time-wait-sync or the
+# equivalent wait service for the configured NTP implementation.
+After=network-online.target time-sync.target
 Wants=network-online.target
 
 # /dev/ldlidar and the OAK-D's USB node are created by udev, which can still be

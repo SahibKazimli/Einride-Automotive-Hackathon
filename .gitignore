@@ -46,3 +46,7 @@ venv/
 .venv/
 # Private Claude notes (robot login etc.)
 CLAUDE.local.md
+
+# Generated SLAM maps. Remove this rule or force-add a selected map to publish it.
+einride_mini_truck_application/maps/*
+!einride_mini_truck_application/maps/.gitkeep

@@ -43,6 +43,7 @@ setup(
             'saga = einride_mini_truck_application.saga.node:main',
             'wheel_odometry = einride_mini_truck_application.localization.node:main',
             'dock_pose = einride_mini_truck_application.perception.node:main',
+            'tag_survey = einride_mini_truck_application.perception.tag_survey:main',
             'mission = einride_mini_truck_application.mission.node:main',
         ],
     },
